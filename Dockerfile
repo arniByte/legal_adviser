@@ -13,7 +13,7 @@ RUN pip install -r requirements.txt
 
 COPY submission/ submission/
 COPY app/ app/
-COPY materials/knowledge-base.zip data/knowledge-base.zip
+COPY data/knowledge-base.zip data/knowledge-base.zip
 
 RUN useradd --create-home --uid 10001 paragraf \
     && mkdir -p /var/cache/paragraf \

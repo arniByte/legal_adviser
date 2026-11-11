@@ -41,7 +41,7 @@ def load_replay() -> None:
     from la_kb import load_kb
     from la_pipeline import parse_dialog
     from la_prompts import EXAMPLES, _resolve
-    kb = load_kb(root / "materials" / "knowledge-base.zip")
+    kb = load_kb(root / "data" / "knowledge-base.zip")
     for ex in EXAMPLES:
         lines = []
         for key, loc, quote in ex["sources"]:
