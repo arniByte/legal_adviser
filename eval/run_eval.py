@@ -60,6 +60,35 @@ def norm(text: str) -> str:
     return re.sub(r"\s+", "", text.lower().replace("ё", "е"))
 
 
+_REF = re.compile(r"(?:п\.|пп\.|ч\.|ст\.|подп\.)\s*(\d+(?:\.\d+)*)")
+
+
+def answer_facts(text: str, question: str) -> set:
+    """Numbers, dates and clause references of a text, minus those already in the question."""
+    from la_text import support_values
+    facts = support_values(text) | {"ref:" + m for m in _REF.findall(text)}
+    return facts - (support_values(question) | {"ref:" + m for m in _REF.findall(question)})
+
+
+def fact_scores(rows: list, ours: dict) -> dict:
+    """Deterministic agreement with the references: share of answer facts found in the reference (precision)
+    and of reference facts found in the answer (recall). Unlike the judge, it does not vary between runs."""
+    p = r = n = extra = missed = 0
+    for row in rows:
+        q = parse_dialog(row["question"]).full_text
+        g, a = answer_facts(row["golden"], q), answer_facts(ours[row["id"]]["answer"], q)
+        if not g and not a:
+            continue
+        hit = len(g & a)
+        p += hit / len(a) if a else 1.0
+        r += hit / len(g) if g else 1.0
+        extra += len(a - g)
+        missed += len(g - a)
+        n += 1
+    p, r = (p / n, r / n) if n else (0.0, 0.0)
+    return {"precision": p, "recall": r, "f1": 2 * p * r / (p + r) if p + r else 0.0, "extra": extra, "missed": missed}
+
+
 def quick_checks(row: dict, answer: str) -> dict:
     a = norm(answer)
     missing = [m for m in row.get("must", []) if norm(m) not in a]
@@ -182,6 +211,7 @@ def metrics(scores: list) -> dict:
 def report(rows: list, ours: dict, base: dict, judged: dict, out_dir: Path, label: str) -> None:
     lines = [f"# Локальная оценка: {label}", ""]
     checks = {r["id"]: quick_checks(r, ours[r["id"]]["answer"]) for r in rows}
+    fs = fact_scores(rows, ours)
     n = len(rows)
     lines += ["## Проверки без судьи", "",
               f"- ответов: {n}; с ошибкой модели: {sum(1 for r in rows if ours[r['id']]['error'])}",
@@ -190,6 +220,8 @@ def report(rows: list, ours: dict, base: dict, judged: dict, out_dir: Path, labe
               f"- есть запрещённые утверждения (`must_not`): {sum(1 for c in checks.values() if c['violated'])}",
               f"- вторых проходов: {sum(1 for r in rows if ours[r['id']]['passes'] > 1)}; исправлений: "
               f"{sum(1 for r in rows if ours[r['id']]['repaired'])}",
+              f"- факты против эталона: точность {fs['precision']:.3f}, полнота {fs['recall']:.3f}, F1 {fs['f1']:.3f}; "
+              f"лишних фактов {fs['extra']}, недостающих {fs['missed']}",
               f"- слов в ответе, медиана: {sorted(c['words'] for c in checks.values())[n // 2]} (в эталонах: "
               f"{sorted(len(r['golden'].split()) for r in rows)[n // 2]}); секунд на вопрос, "
               f"медиана: {sorted(ours[r['id']]['seconds'] for r in rows)[n // 2]:.1f}", ""]
