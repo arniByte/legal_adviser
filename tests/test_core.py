@@ -202,6 +202,19 @@ def test_parse_output_variants():
     assert parse_output("<answer>Да.</answer><extra>пусто</extra>")["extra"] == ""
 
 
+def test_word_cap_keeps_the_direct_answer_and_the_source():
+    from la_prompts import trim_answer
+    short = "Да. По договору № А-08/2024 доступ круглосуточный (п. 4.3)."
+    assert trim_answer(short) == (short, "")
+    filler = " ".join(["Дополнительное положение договора о порядке расчётов между сторонами (п. 4.1)."] * 12)
+    long = "Срок оплаты — 30 календарных дней (п. 4.2). " + filler + " Источник: договор № П-17/2024, п. 4.2."
+    kept, dropped = trim_answer(long)
+    assert kept.startswith("Срок оплаты — 30 календарных дней (п. 4.2).") and kept.endswith("п. 4.2.")
+    assert len(kept.split()) <= 110 and dropped and "Источник" not in dropped
+    steps = "Порядок такой: 1) инициатор — руководитель (п. 1.3); 2) согласование в СЭД (п. 1.4). " + filler
+    assert len(trim_answer(steps)[0].split()) > 110             # enumerated steps get a higher cap
+
+
 def test_prompt_examples_follow_their_own_rules(kb):
     """Few-shot answers must be short and must pass the verifier: the model copies what it sees."""
     from la_prompts import EXAMPLES, _resolve, build_system
