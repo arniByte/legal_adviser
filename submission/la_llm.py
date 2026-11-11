@@ -65,14 +65,17 @@ class LLMClient:
                 last = f"HTTP {r.status_code}"
                 if r.status_code == 429:
                     self._bump("rate_limited")
-                if r.status_code not in RETRY_STATUS:
-                    detail = ""
-                    try:
-                        detail = str(r.json().get("error", ""))[:200]
-                    except Exception:
-                        detail = r.text[:200]
+                detail = ""
+                try:
+                    detail = str(r.json().get("error", ""))[:200]
+                except Exception:
+                    detail = r.text[:200]
+                # some gateways answer 402 while earlier requests are still being billed: this passes on retry
+                in_flight = r.status_code == 402 and "in-flight" in detail
+                if r.status_code not in RETRY_STATUS and not in_flight:
                     raise LLMError(f"{path}: HTTP {r.status_code} {detail}")
-                wait = 1.5 * (2 ** attempt) + random.random()
+                last = f"HTTP {r.status_code} {detail[:80]}"
+                wait = (4.0 if in_flight else 1.5) * (2 ** attempt) + random.random()
                 try:
                     wait = max(wait, min(10.0, float(r.headers.get("retry-after", "0"))))
                 except ValueError:
