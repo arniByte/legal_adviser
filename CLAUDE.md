@@ -30,7 +30,7 @@
 
 ```bash
 uv venv .venv && uv pip install --python .venv/bin/python -r requirements.txt pytest
-.venv/bin/python -m pytest -q tests                  # 31 тест, без сети
+.venv/bin/python -m pytest -q tests                  # автотесты, без сети
 .venv/bin/python scripts/build_submission.py --smoke # собрать dist/submission.zip и прогнать на заглушке
 .venv/bin/python scripts/mock_llm.py --port 8765 --recorded --replay   # заглушка API
 LLM_BASE_URL=http://127.0.0.1:8765/v1 LLM_API_KEY=mock .venv/bin/python -m uvicorn app.server:app --port 8000

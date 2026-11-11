@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 
 from la_kb import company_status, normalize_docnum, twins_of
 from la_llm import LLMError
-from la_prompts import REPAIR_TEMPLATE, build_system, build_user, parse_output
+from la_prompts import REPAIR_TEMPLATE, build_system, build_user, parse_output, trim_answer
 from la_text import find_periods, fmt_date, squash, stem, words
 from la_verify import issues_text, verify
 
@@ -261,6 +261,7 @@ class AnswerResult:
     error: str = ""
     checked_numbers: int = 0
     extra: str = ""            # related provisions the user did not ask about (shown in the UI, not in the submission)
+    trimmed: bool = False      # the answer exceeded the word cap and its tail was moved to `extra`
 
 
 class Assistant:
@@ -358,6 +359,10 @@ class Assistant:
         extra = parsed.get("extra", "")
         if extra and verify({"answer": extra, "sources": []}, self.kb, ctx.doc_ids, dialog.full_text, hint_text)["hard"]:
             extra = ""                                 # side notes are shown only when every fact in them checks out
+        answer, overflow = trim_answer(answer)
+        if overflow:                                   # nothing is lost: the tail moves to the side notes
+            result.trimmed = True
+            extra = (overflow + " " + extra).strip()
         result.extra = extra[:2000]
         result.answer = answer[:9500]
         result.status = parsed["status"]
