@@ -29,6 +29,30 @@ ARGS = None
 STATE = {"calls": {"chat": 0, "embeddings": 0, "rerank": 0}, "repairs": 0}
 
 
+REPLAY: dict = {}
+
+
+def load_replay() -> None:
+    """--replay: answer the few-shot example questions with their reference outputs (for UI demos and tests)."""
+    import sys
+    from pathlib import Path
+    root = Path(__file__).resolve().parent.parent
+    sys.path.insert(0, str(root / "submission"))
+    from la_kb import load_kb
+    from la_pipeline import parse_dialog
+    from la_prompts import EXAMPLES, _resolve
+    kb = load_kb(root / "materials" / "knowledge-base.zip")
+    for ex in EXAMPLES:
+        lines = []
+        for key, loc, quote in ex["sources"]:
+            doc_id = _resolve(kb, key)
+            if doc_id:
+                lines.append(f"{doc_id} | {loc} | {quote}")
+        out = (f"<analysis>{ex['analysis']}</analysis>\n<status>{ex['status']}</status>\n"
+               f"<answer>{ex['answer']}</answer>\n<sources>\n" + "\n".join(lines) + "\n</sources>")
+        REPLAY[" ".join(parse_dialog(ex["q"]).last_user.split())] = out
+
+
 def toks(text: str) -> list:
     return [w.lower().replace("ё", "е")[:6] for w in WORD.findall(text)]
 
@@ -61,6 +85,9 @@ def chat(messages: list) -> str:
     if "выдумай" in ql:
         return ("<analysis>Тест проверки.</analysis>\n<status>ANSWER</status>\n<answer>Срок оплаты составляет 777 "
                 "календарных дней (п. 99.9).</answer>\n<sources>\nD1 | п. 99.9 | такого текста нет\n</sources>")
+    replay = REPLAY.get(" ".join(question.split()))
+    if replay:
+        return replay
     kb_block = user.split("КОНЕЦ БАЗЫ ЗНАНИЙ")[0]
     q = set(toks(question))
     best, best_score, doc_id = "", 0.0, ""
@@ -149,7 +176,10 @@ def main() -> None:
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--latency", type=float, default=0.0)
     ap.add_argument("--fail-rate", type=float, default=0.0)
+    ap.add_argument("--replay", action="store_true", help="reference outputs for the few-shot example questions")
     ARGS = ap.parse_args()
+    if ARGS.replay:
+        load_replay()
     server = ThreadingHTTPServer(("127.0.0.1", ARGS.port), Handler)
     print(f"mock LLM proxy on http://127.0.0.1:{ARGS.port}/v1", flush=True)
     server.serve_forever()

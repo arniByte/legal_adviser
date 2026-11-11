@@ -1,0 +1,23 @@
+# One command starts the whole prototype:  docker compose up --build
+# The chat is then available at http://localhost:8000
+services:
+  app:
+    build: .
+    image: paragraf-legal-assistant
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-deepseek/deepseek-v4.1-flash}
+      EMB_MODEL: ${EMB_MODEL:-baai/bge-m3}
+      RERANKER_MODEL: ${RERANKER_MODEL:-qwen/qwen3-reranker-8b}
+    volumes:
+      - cache:/var/cache/paragraf
+    restart: unless-stopped
+
+volumes:
+  cache:

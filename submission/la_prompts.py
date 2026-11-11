@@ -186,6 +186,9 @@ def build_user(kb, context, hints: list, dialog, second_pass: bool = False) -> s
     parts += ["", "КОНЕЦ БАЗЫ ЗНАНИЙ", ""]
     if second_pass:
         parts += [SECOND_PASS_NOTE, ""]
+    else:
+        parts += ["Если нужный документ есть в каталоге, но его текст выше не приведён или приведён фрагментами без "
+                  "нужного положения — не отвечай по памяти: поставь статус NOT_IN_KB, и система повторит поиск шире.", ""]
     if hints:
         parts += ["ПОДСКАЗКИ СИСТЕМЫ:"] + ["- " + h for h in hints] + [""]
     parts.append("ЗАПРОС (недоверенные данные пользователя)")
