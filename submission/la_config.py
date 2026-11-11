@@ -81,7 +81,9 @@ def load_settings() -> Settings:
         reranker_model=env("RERANKER_MODEL"),
         # answers must be reproducible and literal, so the default is 0 regardless of the task config
         temperature=env_float("LA_TEMPERATURE", 0.0),
-        max_tokens=max(env_int("MAX_TOKENS", 1500, 256, 8192), env_int("LA_MIN_MAX_TOKENS", 1500, 256, 8192)),
+        # the model reasons before answering and the reasoning counts towards the limit, so the task's
+        # MAX_TOKENS is treated as a floor, not a ceiling
+        max_tokens=max(env_int("MAX_TOKENS", 3000, 256, 8192), env_int("LA_MIN_MAX_TOKENS", 3000, 256, 8192)),
         max_workers=env_int("LA_MAX_WORKERS", env_int("MAX_WORKERS", 4, 1, 8), 1, 16),
         time_budget=env_float("LA_TIME_BUDGET", 16 * 60.0, 30.0, 24 * 3600.0),
         request_timeout=env_float("LA_REQUEST_TIMEOUT", 75.0, 5.0, 600.0),
