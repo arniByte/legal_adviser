@@ -53,6 +53,25 @@ def load_replay() -> None:
         REPLAY[" ".join(parse_dialog(ex["q"]).last_user.split())] = out
 
 
+def load_recorded() -> None:
+    """--recorded: replay answers that the real model gave earlier (eval/recorded_answers.json)."""
+    import json
+    import sys
+    from pathlib import Path
+    root = Path(__file__).resolve().parent.parent
+    sys.path.insert(0, str(root / "submission"))
+    from la_pipeline import parse_dialog
+    data = json.loads((root / "eval" / "recorded_answers.json").read_text(encoding="utf-8"))
+    for a in data["answers"]:
+        lines = []
+        for src in a["sources"]:
+            doc_id, _, locator = src.partition(" ")
+            lines.append(f"{doc_id} | {locator} | ")
+        out = (f"<analysis>{a['analysis']}</analysis>\n<status>{a['status']}</status>\n<answer>{a['answer']}</answer>\n"
+               "<sources>\n" + "\n".join(lines) + "\n</sources>")
+        REPLAY[" ".join(parse_dialog(a["question"]).last_user.split())] = out
+
+
 def toks(text: str) -> list:
     return [w.lower().replace("ё", "е")[:6] for w in WORD.findall(text)]
 
@@ -76,6 +95,9 @@ def chat(messages: list) -> str:
     m = re.search(r"(?:Вопрос пользователя:|Последняя реплика пользователя[^\n]*:)\n(.*?)\n\nОтветь на запрос", user, re.S)
     question = (m.group(1) if m else user[-400:]).strip()
     ql = question.lower()
+    replay = REPLAY.get(" ".join(question.split()))
+    if replay:
+        return replay
     if "стихотвор" in ql:
         return ("<analysis>Не юридический запрос.</analysis>\n<status>OFF_TOPIC</status>\n<answer>Я отвечаю только на "
                 "юридические вопросы по документам базы знаний.</answer>\n<sources>\n</sources>")
@@ -85,9 +107,6 @@ def chat(messages: list) -> str:
     if "выдумай" in ql:
         return ("<analysis>Тест проверки.</analysis>\n<status>ANSWER</status>\n<answer>Срок оплаты составляет 777 "
                 "календарных дней (п. 99.9).</answer>\n<sources>\nD1 | п. 99.9 | такого текста нет\n</sources>")
-    replay = REPLAY.get(" ".join(question.split()))
-    if replay:
-        return replay
     kb_block = user.split("КОНЕЦ БАЗЫ ЗНАНИЙ")[0]
     q = set(toks(question))
     best, best_score, doc_id = "", 0.0, ""
@@ -177,9 +196,13 @@ def main() -> None:
     ap.add_argument("--latency", type=float, default=0.0)
     ap.add_argument("--fail-rate", type=float, default=0.0)
     ap.add_argument("--replay", action="store_true", help="reference outputs for the few-shot example questions")
+    ap.add_argument("--recorded", action="store_true", help="replay answers recorded from the real model")
     ARGS = ap.parse_args()
+    ap_recorded = ARGS.recorded
     if ARGS.replay:
         load_replay()
+    if ap_recorded:
+        load_recorded()
     server = ThreadingHTTPServer(("127.0.0.1", ARGS.port), Handler)
     print(f"mock LLM proxy on http://127.0.0.1:{ARGS.port}/v1", flush=True)
     server.serve_forever()
