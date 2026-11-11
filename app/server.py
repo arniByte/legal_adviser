@@ -216,6 +216,7 @@ def _present(result) -> dict:
     ok_sources = sum(1 for s in sources if s["ok"])
     return {
         "answer": result.answer,
+        "extra": result.extra,
         "status": result.status,
         "status_label": STATUS_LABELS.get(result.status, result.status),
         "sources": sources,
