@@ -198,10 +198,15 @@ def _to_question(messages: list) -> str:
 def _present(result) -> dict:
     kb = S.kb
     sources = []
+    seen = set()
     for s in result.sources:
         doc = kb.by_id.get(s["doc_id"])
         if doc is None:
             continue
+        key = (s["doc_id"], s["start"], s["end"], s["locator"] if s["start"] is None else "")
+        if key in seen:                      # the same provision cited twice is shown once
+            continue
+        seen.add(key)
         summary = _doc_summary(doc)
         sources.append({"doc_id": s["doc_id"], "title": summary["title"], "locator": s["locator"],
                         "quote": s["quote"], "start": s["start"], "end": s["end"], "ok": s["ok"],

@@ -10,3 +10,4 @@ submission.csv
 eval/runs/
 node_modules/
 .DS_Store
+presentation/preview/
