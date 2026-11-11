@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Параграф — иллюстрации для README</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+  body { padding: 0; }
+  .fig { position: relative; overflow: hidden; width: 1600px; }
+
+  /* hero */
+  #hero { height: 640px; display: flex; align-items: center; padding: 0 110px; gap: 40px; }
+  #hero .text { position: relative; z-index: 2; flex: 1; }
+  #hero h1 { font-size: 132px; font-weight: 500; letter-spacing: -.05em; line-height: 1; }
+  #hero p { margin-top: 34px; font-size: 34px; line-height: 1.35; color: var(--ink-2); max-width: 640px; letter-spacing: -.01em; }
+  #hero .scene { position: relative; z-index: 2; width: 700px; height: 520px; }
+  #hero .scene > .orb { position: absolute; width: 330px; height: 330px; right: 0; top: 0; }
+  #hero .card { position: absolute; left: 0; bottom: 10px; width: 620px; padding: 30px 32px 30px; }
+  .q { display: inline-block; padding: 14px 22px; border-radius: 22px; background: var(--glass-strong); border: 1px solid var(--glass-edge); font-size: 23px; line-height: 1.4; box-shadow: var(--shadow); }
+  .a { display: flex; gap: 16px; margin-top: 24px; font-size: 25px; line-height: 1.45; }
+  .a .orb { width: 34px; height: 34px; margin-top: 2px; }
+  .facts { display: flex; flex-wrap: wrap; gap: 10px; margin: 20px 0 0 50px; font-size: 19px; }
+  .facts .pill { padding: 9px 17px; box-shadow: none; }
+  .facts .pill span { color: var(--ink-2); }
+
+  /* how it works */
+  #how { height: 600px; padding: 80px 90px 0; }
+  #how h2 { position: relative; z-index: 2; font-size: 56px; font-weight: 500; letter-spacing: -.035em; }
+  #how .steps { position: relative; z-index: 2; display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; margin-top: 54px; }
+  #how .line { position: absolute; left: 60px; right: 60px; top: 66px; height: 3px; border-radius: 3px; background: var(--iris); opacity: .35; }
+  .step { position: relative; padding: 32px 30px 34px; min-height: 330px; }
+  .step .n { width: 64px; height: 64px; display: grid; place-items: center; border-radius: 50%; font-size: 30px; font-weight: 600; color: #fff; }
+  .step .n span { position: relative; z-index: 2; text-shadow: 0 1px 8px rgba(70, 50, 140, .35); }
+  .step h3 { margin-top: 30px; font-size: 38px; font-weight: 500; letter-spacing: -.025em; }
+  .step p { margin-top: 14px; font-size: 23px; line-height: 1.42; color: var(--ink-2); }
+  .step .who { position: absolute; right: 26px; top: 40px; font-size: 18px; color: var(--ink-3); }
+</style>
+</head>
+<body>
+
+<section class="fig" id="hero">
+  <div class="aura"><i class="lilac" style="width:760px;height:760px;left:-200px;top:-260px"></i><i class="peach" style="width:640px;height:640px;right:-120px;top:-240px"></i><i class="mint" style="width:620px;height:620px;left:520px;bottom:-420px"></i><i class="sky" style="width:520px;height:520px;right:120px;bottom:-300px"></i></div>
+  <div class="text">
+    <h1>Параграф</h1>
+    <p>Юридический ассистент. Отвечает по договорам, регламентам и законам — со ссылкой на пункт.</p>
+  </div>
+  <div class="scene">
+    <div class="orb glow"></div>
+    <div class="card glass">
+      <div class="q">Почему аренда у «Северного Склада» 500 000 в месяц?</div>
+      <div class="a"><div class="orb"></div><div>Арендная плата — <b>450 000 рублей</b> в месяц, включая НДС, а не 500 000 (п. 3.1).</div></div>
+      <div class="facts"><span class="pill"><b>п. 3.1</b><span>Договор аренды</span></span><span class="pill ok">✓ Сверено с документами</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="fig" id="how">
+  <div class="aura"><i class="lilac" style="width:700px;height:700px;left:-220px;top:-200px"></i><i class="mint" style="width:620px;height:620px;left:560px;bottom:-360px"></i><i class="peach" style="width:600px;height:600px;right:-160px;top:-160px"></i></div>
+  <h2>Как получается ответ</h2>
+  <div class="steps">
+    <div class="line"></div>
+    <div class="step glass"><div class="n orb"><span>1</span></div><span class="who">код</span><h3>Вопрос</h3><p>Кто контрагент, какой договор, какая дата и какая редакция тогда действовала.</p></div>
+    <div class="step glass"><div class="n orb"><span>2</span></div><span class="who">код</span><h3>Поиск</h3><p>Нужные пункты в базе: по словам, по смыслу и с перепроверкой порядка.</p></div>
+    <div class="step glass"><div class="n orb"><span>3</span></div><span class="who">модель</span><h3>Ответ</h3><p>Только по найденному тексту и со ссылкой на пункт. Нет в базе — так и говорит.</p></div>
+    <div class="step glass"><div class="n orb"><span>4</span></div><span class="who">код</span><h3>Сверка</h3><p>Каждое число, дату, название и цитату программа ищет в документах.</p></div>
+  </div>
+</section>
+
+</body>
+</html>
