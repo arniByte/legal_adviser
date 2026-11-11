@@ -17,11 +17,11 @@ Python 3.10+. Docker нужен только для проверки финал�
 | `submission/` | ядро ассистента и `solution.py` — всё, что уходит в ZIP на автопроверку |
 | `app/` | веб-прототип: HTTP-слой над ядром и статический интерфейс |
 | `eval/` | набор вопросов с эталонами, локальный судья, записанные ответы модели |
-| `scripts/` | сборка ZIP, заглушка API, генерация иллюстраций |
+| `scripts/` | сборка ZIP, заглушка API |
 | `tests/` | автотесты |
 | `data/` | материалы организаторов: база знаний, демо-вопросы, разрешённые зависимости, пример сабмита |
 | `docs/` | кейс, архитектура, оценка, решения |
-| `presentation/` | презентация: исходник, иллюстрации, PDF |
+| `presentation/` | презентация, иллюстрации для README и общий стиль `theme.css` |
 
 ## Команды
 
@@ -29,8 +29,8 @@ Python 3.10+. Docker нужен только для проверки финал�
 .venv/bin/python -m pytest -q tests                    # автотесты, без сети и ключей
 .venv/bin/python scripts/build_submission.py --smoke   # собрать dist/submission.zip и прогнать его на заглушке API
 .venv/bin/python eval/run_eval.py --workers 6          # локальная оценка, нужен ключ в окружении
-.venv/bin/python scripts/figures.py                    # перерисовать иллюстрации в docs/assets и presentation/img
-node presentation/build.js                             # собрать presentation/paragraf.pdf (нужен Playwright)
+node presentation/build.js                             # PDF презентации и иллюстрации README (нужен Playwright)
+node presentation/build.js --shots                     # плюс свежие скриншоты интерфейса; веб-прототип должен работать на :8000
 ```
 
 Веб-прототип без Docker:
@@ -84,3 +84,4 @@ LLM_BASE_URL=http://127.0.0.1:8765/v1 LLM_API_KEY=mock .venv/bin/python -m uvico
 - Python: стандартная библиотека плюс `httpx` и `numpy` в ядре, FastAPI в прототипе. Комментарии объясняют «почему», а не «что».
 - Коммиты: короткий заголовок в повелительном наклонении, тело — зачем изменение и как проверено.
 - Документация — по-русски, без воды: факт, источник, вывод.
+- Интерфейс, презентация и иллюстрации — в одном стиле: светлый фон, стекло, переливающаяся сфера, шрифт Onest, крупный текст без мелких подписей. Цвета и шрифты — в `app/static/app.css` и `presentation/theme.css`.
