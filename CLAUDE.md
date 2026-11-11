@@ -35,7 +35,6 @@ uv venv .venv && uv pip install --python .venv/bin/python -r requirements.txt py
 .venv/bin/python scripts/mock_llm.py --port 8765 --recorded --replay   # заглушка API
 LLM_BASE_URL=http://127.0.0.1:8765/v1 LLM_API_KEY=mock .venv/bin/python -m uvicorn app.server:app --port 8000
 .venv/bin/python eval/run_eval.py --workers 2        # нужен настоящий ключ: ответы, baseline, судья, отчёт
-node presentation/build.js                           # пересобрать PDF презентации (нужен Playwright)
 ```
 
 Заглушка `scripts/mock_llm.py` — не модель: по умолчанию она отвечает выдержкой из контекста. Флаг `--recorded` воспроизводит ответы, записанные с настоящей модели (`eval/recorded_answers.json`), `--replay` — эталонные выводы примеров из промпта.
@@ -52,4 +51,5 @@ node presentation/build.js                           # пересобрать PD
 - Не подгонять решение под 18 демо-вопросов и не вшивать ответы.
 - Не добавлять LangChain, векторные БД и прочие тяжёлые зависимости: фрагментов сотни.
 - Не выдавать ответы заглушки или эталоны за ответы модели — ни в отчётах, ни в презентации.
+- Не раздувать ответ: в сабмит идёт только блок `<answer>`; смежные нормы модель пишет в `<extra>`, он виден только в веб-чате.
 - Не коммитить `.env`, `dist/`, `eval/runs/`.

@@ -195,6 +195,27 @@ def test_parse_output_variants():
     assert unclosed["status"] == "NOT_IN_KB" and unclosed["answer"] == "В базе нет сведений."
     thinking = parse_output("<think>скрытые рассуждения</think>" + GOOD)
     assert "скрытые" not in thinking["answer"]
+    with_extra = parse_output("<status>ANSWER</status><answer>Срок — 30 календарных дней (п. 4.2).</answer>"
+                              "<extra>Неустойка за просрочку — 0,1% в день (п. 7.2).</extra><sources>\nD2 | п. 4.2 | x\n</sources>")
+    assert with_extra["answer"] == "Срок — 30 календарных дней (п. 4.2)." and "7.2" in with_extra["extra"]
+    assert "0,1%" not in with_extra["answer"]                 # side notes never leak into the submitted answer
+    assert parse_output("<answer>Да.</answer><extra>пусто</extra>")["extra"] == ""
+
+
+def test_prompt_examples_follow_their_own_rules(kb):
+    """Few-shot answers must be short and must pass the verifier: the model copies what it sees."""
+    from la_prompts import EXAMPLES, _resolve, build_system
+    from la_verify import verify
+    ctx = [d.doc_id for d in kb.docs]
+    for ex in EXAMPLES:
+        assert len(ex["answer"].split()) <= 75, ex["q"]
+        for text in (ex["answer"], ex.get("extra", "")):
+            if text:
+                assert verify({"answer": text, "sources": []}, kb, ctx, ex["q"])["hard"] == 0, (ex["q"], text)
+        for key, _, quote in ex["sources"]:
+            doc = kb.by_id[_resolve(kb, key)]
+            assert doc.index.find(quote) is not None, (ex["q"], quote)
+    assert build_system(kb).count("<extra>") >= len(EXAMPLES)
 
 
 def _check(kb, raw, question, extra_docs=()):

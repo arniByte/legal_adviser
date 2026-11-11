@@ -260,6 +260,7 @@ class AnswerResult:
     timings: dict = field(default_factory=dict)
     error: str = ""
     checked_numbers: int = 0
+    extra: str = ""            # related provisions the user did not ask about (shown in the UI, not in the submission)
 
 
 class Assistant:
@@ -354,6 +355,10 @@ class Assistant:
 
         answer = parsed["answer"] or FALLBACK_ANSWER
         answer = self._ensure_reference(answer, parsed["status"], report)
+        extra = parsed.get("extra", "")
+        if extra and verify({"answer": extra, "sources": []}, self.kb, ctx.doc_ids, dialog.full_text, hint_text)["hard"]:
+            extra = ""                                 # side notes are shown only when every fact in them checks out
+        result.extra = extra[:2000]
         result.answer = answer[:9500]
         result.status = parsed["status"]
         result.sources = report["sources"]

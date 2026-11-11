@@ -190,7 +190,8 @@ def report(rows: list, ours: dict, base: dict, judged: dict, out_dir: Path, labe
               f"- есть запрещённые утверждения (`must_not`): {sum(1 for c in checks.values() if c['violated'])}",
               f"- вторых проходов: {sum(1 for r in rows if ours[r['id']]['passes'] > 1)}; исправлений: "
               f"{sum(1 for r in rows if ours[r['id']]['repaired'])}",
-              f"- слов в ответе, медиана: {sorted(c['words'] for c in checks.values())[n // 2]}; секунд на вопрос, "
+              f"- слов в ответе, медиана: {sorted(c['words'] for c in checks.values())[n // 2]} (в эталонах: "
+              f"{sorted(len(r['golden'].split()) for r in rows)[n // 2]}); секунд на вопрос, "
               f"медиана: {sorted(ours[r['id']]['seconds'] for r in rows)[n // 2]:.1f}", ""]
     if judged:
         ok = [r for r in rows if "score" in judged[r["id"]]]
@@ -248,6 +249,9 @@ def main() -> None:
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--no-judge", action="store_true")
     ap.add_argument("--no-baseline", action="store_true")
+    ap.add_argument("--baseline", choices=["sample", "golden"], default="golden",
+                    help="golden: the reference answer plays the baseline (a strong baseline, as on the platform, "
+                         "where every team scores below 0.5); sample: the organisers' starter submission")
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--label", default=time.strftime("%Y%m%d-%H%M%S"))
     args = ap.parse_args()
@@ -260,8 +264,11 @@ def main() -> None:
     ours = run_ours(rows, settings, args.workers)
     base, judged = {}, {}
     if not args.no_judge and not args.no_baseline:
-        safe = re.sub(r"[^0-9A-Za-z]+", "_", settings.llm_model)
-        base = run_baseline(rows, Path(__file__).resolve().parent / "runs" / f"baseline_{safe}.json")
+        if args.baseline == "golden":
+            base = {r["id"]: r["golden"] for r in rows}
+        else:
+            safe = re.sub(r"[^0-9A-Za-z]+", "_", settings.llm_model)
+            base = run_baseline(rows, Path(__file__).resolve().parent / "runs" / f"baseline_{safe}.json")
         judged = judge_all(rows, ours, base, settings, args.workers)
     report(rows, ours, base, judged, out_dir, args.label)
 

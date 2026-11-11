@@ -240,6 +240,12 @@
     const total = r.trace.timings && r.trace.timings.total;
     if (total) head.append(el("span", "card-time", total.toFixed(1).replace(".", ",") + " с"));
     card.append(head, el("div", "answer", r.answer));
+    if (r.extra) {
+      const more = el("details", "extra");
+      const ms = el("summary"); ms.innerHTML = ICONS.chev + "<span>Смежные положения, о которых не спрашивали</span>";
+      more.append(ms, el("div", "extra-body", r.extra));
+      card.append(more);
+    }
 
     if (r.sources.length) {
       const box = el("div", "sources");
