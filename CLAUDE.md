@@ -35,7 +35,7 @@ uv venv .venv && uv pip install --python .venv/bin/python -r requirements.txt py
 .venv/bin/python scripts/mock_llm.py --port 8765 --recorded --replay   # заглушка API
 LLM_BASE_URL=http://127.0.0.1:8765/v1 LLM_API_KEY=mock .venv/bin/python -m uvicorn app.server:app --port 8000
 .venv/bin/python eval/run_eval.py --workers 2        # нужен настоящий ключ: ответы, baseline, судья, отчёт
-.venv/bin/python presentation/build.py               # пересобрать PDF презентации
+node presentation/build.js                           # пересобрать PDF презентации (нужен Playwright)
 ```
 
 Заглушка `scripts/mock_llm.py` — не модель: по умолчанию она отвечает выдержкой из контекста. Флаг `--recorded` воспроизводит ответы, записанные с настоящей модели (`eval/recorded_answers.json`), `--replay` — эталонные выводы примеров из промпта.
