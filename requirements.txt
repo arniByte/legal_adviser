@@ -1,0 +1,6 @@
+# Web prototype. Versions are taken from the organisers' allowed list (materials/requirements.txt).
+fastapi==0.143.2
+uvicorn==0.54.0
+pydantic==2.14.2
+httpx==0.28.1
+numpy==2.2.6
