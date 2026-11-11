@@ -313,7 +313,7 @@ class Assistant:
         result.passes = 1
 
         # ---- second, wide pass before a refusal or a partial answer
-        need_wide = parsed["status"] in ("NOT_IN_KB", "PARTIAL")
+        need_wide = parsed["status"] in ("NOT_IN_KB", "PARTIAL", "ILLEGAL")
         if full and self.s.second_pass and need_wide and self._time_left(deadline) > 25:
             stage("second_pass")
             t = time.monotonic()

@@ -56,10 +56,13 @@ def _derivable(targets: set, operands: list) -> bool:
         if hit(a * b) or hit(a * b / 100.0) or hit(a + b) or hit(a - b) or (b and hit(a / b)) \
                 or (b and hit(a / b * 100.0)) or hit(a + a * b / 100.0) or hit(a - a * b / 100.0):
             return True
-    if len(ops) <= 18:
+    if len(ops) <= 22:
         for a, b, c in itertools.combinations(ops, 3):
             p = a * b * c
             if hit(p) or hit(p / 100.0) or hit(p / 10000.0):
+                return True
+        for a, b, c in itertools.permutations(ops, 3):       # "312 000 + 15% x 1 600 000"
+            if b < c and (hit(a + b * c / 100.0) or hit(a - b * c / 100.0) or hit(a + b * c) or hit(a - b * c)):
                 return True
     return False
 
@@ -85,12 +88,15 @@ def verify(parsed: dict, kb, context_doc_ids: list, question_text: str, extra_te
                            "detail": f"метка документа {src['doc_id']} отсутствует в базе"})
             resolved.append(item)
             continue
-        keys = locator_keys(src["locator"])
+        numbered = any(u.keys for u in doc.units)
+        loose = bool(re.search(r"(абз|раздел|преамбул|шапк|реквизит|приложени)", src["locator"].lower()))
+        keys = locator_keys(src["locator"]) if (numbered and not loose) else ()
         unit = doc.unit_by_keys(keys) if keys else None
-        if keys and unit is None:
-            issues.append({"type": "bad_locator", "hard": True,
-                           "detail": f"в документе «{doc.title}» нет положения «{src['locator']}»"})
         span = doc.index.find(src["quote"]) if src["quote"] else None
+        if keys and unit is None:
+            # hard only when nothing ties the citation to the document: wrong label AND no matching quote
+            issues.append({"type": "bad_locator", "hard": span is None,
+                           "detail": f"в документе «{doc.title}» нет положения «{src['locator']}»"})
         if src["quote"] and span is None:
             issues.append({"type": "bad_quote", "hard": False,
                            "detail": f"цитата не найдена в документе «{doc.title}»: «{src['quote'][:80]}»"})
@@ -113,6 +119,10 @@ def verify(parsed: dict, kb, context_doc_ids: list, question_text: str, extra_te
         doc = kb.by_id.get(doc_id)
         if doc is not None:
             support |= doc_support(doc)
+    catalog = getattr(kb, "_catalog_support", None)          # titles of all documents are shown in the catalogue
+    if catalog is None:
+        catalog = kb._catalog_support = support_values("\n".join(d.title for d in kb.docs))
+    support |= catalog
     question_values = support_values(question_text + "\n" + extra_text)
     support |= question_values
     quote_values: set = set()
@@ -121,18 +131,26 @@ def verify(parsed: dict, kb, context_doc_ids: list, question_text: str, extra_te
     operands = _floats(question_values | quote_values)
 
     checked = 0
-    unsupported = []
+    pending = []
     for m in number_mentions(answer):
         if m.kind == "marker":
             continue
         if m.kind == "word" and m.alts <= {"1", "0"}:
             continue                                  # "один из", "одна сторона" are not facts
         checked += 1
-        if m.supported_by(support):
-            continue
-        if m.kind != "date" and _derivable(m.alts, operands + _floats(support & _answer_values(answer))):
-            continue
-        unsupported.append(m.surface)
+        if not m.supported_by(support):
+            pending.append(m)
+    # numbers obtained by arithmetic: intermediate results become operands for the next step
+    pool = operands + _floats(support & _answer_values(answer))
+    changed = True
+    while changed and pending:
+        changed = False
+        for m in list(pending):
+            if m.kind != "date" and _derivable(m.alts, pool):
+                pool = pool + _floats(m.alts)
+                pending.remove(m)
+                changed = True
+    unsupported = [m.surface for m in pending]
     for surface in dict.fromkeys(unsupported):
         issues.append({"type": "unsupported_number", "hard": True,
                        "detail": f"число или дата «{surface}» отсутствует в документах и в вопросе"})
@@ -143,6 +161,8 @@ def verify(parsed: dict, kb, context_doc_ids: list, question_text: str, extra_te
                            if d in kb.by_id] + [alnum(question_text), alnum(extra_text)])
     compact = haystack.replace(" ", "")
     for name in dict.fromkeys(_NAME_RE.findall(answer)):
+        if not (name[:1].isupper() or any(ch.isdigit() for ch in name)):
+            continue                                   # a quoted turn of phrase, not a name or a title
         key = alnum(name)
         if len(key) >= 3 and key not in haystack and key.replace(" ", "") not in compact:
             issues.append({"type": "unsupported_name", "hard": True,

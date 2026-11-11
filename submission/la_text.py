@@ -173,6 +173,7 @@ def fmt_date(y: int, mo: int, d: int) -> str:
 # --------------------------------------------------------------------------- #
 
 _NUM_RE = re.compile(r"(?<![\w])(\d{1,3}(?: \d{3})+(?:,\d+)?|\d+(?:[.,]\d+)?)")
+_REF_BEFORE_RE = re.compile(r"(?:ст|п|пп|ч|подп|абз|стать\w*|пункт\w*|част\w*|№)\.?\s*$", re.I)
 _SCALE_RE = re.compile(r"\s*(тыс|млн|млрд|миллион|миллиард)", re.I)
 _SCALES = {"тыс": 10 ** 3, "млн": 10 ** 6, "миллион": 10 ** 6, "млрд": 10 ** 9, "миллиард": 10 ** 9}
 
@@ -252,6 +253,12 @@ def number_mentions(text: str) -> list[Mention]:
     consumed: list[tuple[int, int]] = []
     for m in _NUM_RE.finditer(t2):
         raw = m.group(1)
+        if " " in raw and (_REF_BEFORE_RE.search(t2[max(0, m.start() - 12):m.start()])
+                           or t2[m.end():m.end() + 3].upper().startswith(("-ФЗ", "-Ф", "-П"))):
+            # "ст. 9 152-ФЗ", "п. 3 164": a reference followed by another number, not a thousands group
+            for part in raw.split(" "):
+                mentions.append(Mention(part, {canon(part)}, "digit"))
+            continue
         base = canon(raw)
         alts = {base}
         scale = _SCALE_RE.match(t2, m.end())
