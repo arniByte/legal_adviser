@@ -60,6 +60,35 @@ def norm(text: str) -> str:
     return re.sub(r"\s+", "", text.lower().replace("ё", "е"))
 
 
+_REF = re.compile(r"(?:п\.|пп\.|ч\.|ст\.|подп\.)\s*(\d+(?:\.\d+)*)")
+
+
+def answer_facts(text: str, question: str) -> set:
+    """Numbers, dates and clause references of a text, minus those already in the question."""
+    from la_text import support_values
+    facts = support_values(text) | {"ref:" + m for m in _REF.findall(text)}
+    return facts - (support_values(question) | {"ref:" + m for m in _REF.findall(question)})
+
+
+def fact_scores(rows: list, ours: dict) -> dict:
+    """Deterministic agreement with the references: share of answer facts found in the reference (precision)
+    and of reference facts found in the answer (recall). Unlike the judge, it does not vary between runs."""
+    p = r = n = extra = missed = 0
+    for row in rows:
+        q = parse_dialog(row["question"]).full_text
+        g, a = answer_facts(row["golden"], q), answer_facts(ours[row["id"]]["answer"], q)
+        if not g and not a:
+            continue
+        hit = len(g & a)
+        p += hit / len(a) if a else 1.0
+        r += hit / len(g) if g else 1.0
+        extra += len(a - g)
+        missed += len(g - a)
+        n += 1
+    p, r = (p / n, r / n) if n else (0.0, 0.0)
+    return {"precision": p, "recall": r, "f1": 2 * p * r / (p + r) if p + r else 0.0, "extra": extra, "missed": missed}
+
+
 def quick_checks(row: dict, answer: str) -> dict:
     a = norm(answer)
     missing = [m for m in row.get("must", []) if norm(m) not in a]
@@ -75,7 +104,7 @@ def load_devset(path: Path, only, limit) -> list:
 
 
 def run_ours(rows: list, settings, workers: int) -> dict:
-    kb = load_kb(ROOT / "materials" / "knowledge-base.zip")
+    kb = load_kb(ROOT / "data" / "knowledge-base.zip")
     llm = LLMClient(settings)
     retriever = Retriever(kb, llm, settings)
     dense = retriever.build_embeddings()
@@ -99,7 +128,7 @@ def run_ours(rows: list, settings, workers: int) -> dict:
 
 
 def run_baseline(rows: list, cache: Path) -> dict:
-    """Answers of the organisers' sample submission (materials/sample_submission) on the same questions."""
+    """Answers of the organisers' sample submission (data/sample_submission) on the same questions."""
     if cache.is_file():
         cached = json.loads(cache.read_text(encoding="utf-8"))
         if all(r["id"] in cached for r in rows):
@@ -107,13 +136,13 @@ def run_baseline(rows: list, cache: Path) -> dict:
             return cached
     work = Path(tempfile.mkdtemp(prefix="la_baseline_"))
     (work / "data").mkdir()
-    (work / "data" / "kb.zip").write_bytes((ROOT / "materials" / "knowledge-base.zip").read_bytes())
+    (work / "data" / "kb.zip").write_bytes((ROOT / "data" / "knowledge-base.zip").read_bytes())
     with (work / "data" / "questions.csv").open("w", encoding="utf-8", newline="") as f:
         w = csv.writer(f)
         w.writerow(["id", "question"])
         w.writerows([r["id"], r["question"]] for r in rows)
     env = dict(os.environ, DATA_DIR="data")
-    run = subprocess.run([sys.executable, str(ROOT / "materials" / "sample_submission" / "solution.py")], cwd=work,
+    run = subprocess.run([sys.executable, str(ROOT / "data" / "sample_submission" / "solution.py")], cwd=work,
                          env=env, capture_output=True, text=True, timeout=1500)
     if run.returncode != 0:
         raise RuntimeError("baseline failed: " + run.stderr[-400:])
@@ -182,6 +211,7 @@ def metrics(scores: list) -> dict:
 def report(rows: list, ours: dict, base: dict, judged: dict, out_dir: Path, label: str) -> None:
     lines = [f"# Локальная оценка: {label}", ""]
     checks = {r["id"]: quick_checks(r, ours[r["id"]]["answer"]) for r in rows}
+    fs = fact_scores(rows, ours)
     n = len(rows)
     lines += ["## Проверки без судьи", "",
               f"- ответов: {n}; с ошибкой модели: {sum(1 for r in rows if ours[r['id']]['error'])}",
@@ -190,6 +220,8 @@ def report(rows: list, ours: dict, base: dict, judged: dict, out_dir: Path, labe
               f"- есть запрещённые утверждения (`must_not`): {sum(1 for c in checks.values() if c['violated'])}",
               f"- вторых проходов: {sum(1 for r in rows if ours[r['id']]['passes'] > 1)}; исправлений: "
               f"{sum(1 for r in rows if ours[r['id']]['repaired'])}",
+              f"- факты против эталона: точность {fs['precision']:.3f}, полнота {fs['recall']:.3f}, F1 {fs['f1']:.3f}; "
+              f"лишних фактов {fs['extra']}, недостающих {fs['missed']}",
               f"- слов в ответе, медиана: {sorted(c['words'] for c in checks.values())[n // 2]} (в эталонах: "
               f"{sorted(len(r['golden'].split()) for r in rows)[n // 2]}); секунд на вопрос, "
               f"медиана: {sorted(ours[r['id']]['seconds'] for r in rows)[n // 2]:.1f}", ""]
@@ -200,7 +232,13 @@ def report(rows: list, ours: dict, base: dict, judged: dict, out_dir: Path, labe
                   f"**Score {total['score']:.3f}** = 0,7 × MatchRate {total['match_rate']:.3f} + 0,3 × WinRate "
                   f"{total['win_rate']:.3f} · побед {total['wins']}, ничьих {total['ties']}, поражений {total['losses']} "
                   f"из {total['n']} (ошибок судьи: {n - len(ok)})", "",
-                  "| Категория | n | MatchRate | WinRate | Score | П / Н / Пр |", "|---|---|---|---|---|---|"]
+                  "| Набор | n | MatchRate | WinRate | Score | П / Н / Пр |", "|---|---|---|---|---|---|"]
+        for src, title in (("organisers", "эталоны организаторов"), ("team", "эталоны команды")):
+            m = metrics([judged[r["id"]]["score"] for r in ok if r.get("source") == src])
+            if m["n"]:
+                lines.append(f"| {title} | {m['n']} | {m['match_rate']:.2f} | {m['win_rate']:.2f} | {m['score']:.2f} | "
+                             f"{m['wins']} / {m['ties']} / {m['losses']} |")
+        lines += ["", "| Категория | n | MatchRate | WinRate | Score | П / Н / Пр |", "|---|---|---|---|---|---|"]
         for cat in sorted({r["category"] for r in ok}):
             m = metrics([judged[r["id"]]["score"] for r in ok if r["category"] == cat])
             lines.append(f"| {cat} | {m['n']} | {m['match_rate']:.2f} | {m['win_rate']:.2f} | {m['score']:.2f} | "

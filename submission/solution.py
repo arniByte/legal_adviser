@@ -206,7 +206,8 @@ def main() -> int:
         f"answers with side notes kept out: {state['extra']}; trimmed by the word cap: {state['trimmed']}")
     print(f"submission.csv: {len(answers)}/{total} answers", flush=True)
     log(f"done: {len(answers)}/{total} answers; modes {state['modes']}; statuses {state['status']}; "
-        f"llm calls {st['chat_calls']} (errors {st['chat_errors']}, retries {st['retries']}, 429: {st['rate_limited']}); "
+        f"llm calls {st['chat_calls']} (errors {st['chat_errors']}, retries {st['retries']}, 429: {st['rate_limited']}, "
+        f"length retries {st['length_retries']}, truncated {st['truncated']}); "
         f"tokens in/out {st['prompt_tokens']}/{st['completion_tokens']} (cached {st['cached_tokens']}); "
         f"repaired {state['repaired']}; unresolved check issues {state['issues']}; "
         f"reranker {'on' if llm.reranker_ok else 'off'}")

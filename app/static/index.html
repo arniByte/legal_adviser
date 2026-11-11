@@ -1,58 +1,71 @@
 <!doctype html>
-<html lang="ru" data-theme="light">
+<html lang="ru" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Параграф — юридический ассистент</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%230B1B4D'/%3E%3Ctext x='32' y='46' font-family='Georgia,serif' font-size='42' font-weight='700' text-anchor='middle' fill='%23FF6B2C'%3E%C2%A7%3C/text%3E%3C/svg%3E">
+<meta name="description" content="Юридический ассистент: ответы по базе нормативных документов со ссылкой на пункт и проверкой каждого факта.">
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="/static/fonts/source-serif-4-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/static/fonts/inter-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
+
+<section class="intro" id="intro" aria-label="Заставка">
+  <div class="intro-cluster" id="introCluster" aria-hidden="true"></div>
+  <div class="intro-copy">
+    <div class="kicker">Юридический ассистент</div>
+    <h1>Параграф</h1>
+    <p>Отвечает по документам базы знаний — со ссылкой на пункт.<br>Если сведений нет, так и говорит.</p>
+    <button class="intro-go" id="introGo" type="button">Начать <span aria-hidden="true">→</span></button>
+    <div class="intro-meta" id="introMeta">База знаний загружается…</div>
+  </div>
+</section>
+
 <div class="app" id="app">
 
   <aside class="rail" id="rail" aria-label="База знаний">
     <div class="brand">
-      <div class="brand-mark" aria-hidden="true">§</div>
-      <div>
-        <div class="brand-name">Параграф</div>
-        <div class="brand-sub">юридический ассистент</div>
-      </div>
-      <button class="icon-btn only-mobile" id="railClose" aria-label="Закрыть список документов">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+        <circle cx="16" cy="16" r="14.5"/><path d="M9.5 12.5a5 5 0 0 1 9.4-2.4M7.6 19.2a6.5 6.5 0 0 0 12.2 2.3M21 9.8a4.6 4.6 0 0 1 2.6 7.9"/>
+      </svg>
+      <span class="wordmark">Параграф</span>
+      <button class="icon-btn only-mobile" id="railClose" aria-label="Закрыть панель">
         <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
     </div>
 
-    <div class="kb-card" id="kbCard">
-      <div class="kb-row"><span class="kb-num" id="kbDocs">—</span><span class="kb-label">документов</span></div>
-      <div class="kb-row"><span class="kb-num" id="kbFrags">—</span><span class="kb-label">фрагментов</span></div>
-      <div class="kb-row"><span class="kb-num" id="kbGuard">—</span><span class="kb-label">инструкций отсеяно</span></div>
+    <div class="kb-head">
+      <span class="label">База знаний</span>
+      <span class="kb-count" id="kbCount"></span>
+    </div>
+    <div class="cluster" id="cluster" role="img" aria-label="Документы базы знаний"></div>
+    <div class="tip" id="tip" hidden></div>
+    <div class="legend">
+      <span><i class="dot lit"></i>в ответе</span>
+      <span><i class="dot base"></i>в базе</span>
+      <span><i class="dot rest"></i>утратил силу</span>
     </div>
 
     <label class="search">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4-4"/></svg>
       <input id="docFilter" type="search" placeholder="Найти документ" autocomplete="off">
     </label>
-
     <nav class="doc-list" id="docList"></nav>
-
     <div class="rail-foot" id="railFoot"></div>
   </aside>
 
   <main class="chat">
     <header class="topbar">
-      <button class="icon-btn only-mobile" id="railOpen" aria-label="Документы базы знаний">
-        <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      <button class="icon-btn only-mobile" id="railOpen" aria-label="База знаний">
+        <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
       </button>
-      <div class="topbar-title">
-        <span class="dot" id="apiDot"></span>
-        <span id="apiText">Подключение…</span>
-      </div>
+      <div class="status-line"><span class="pulse" id="apiDot"></span><span id="apiText">Подключение…</span></div>
       <div class="topbar-actions">
-        <button class="ghost-btn" id="newChat" title="Начать новый диалог">
-          <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg><span>Новый диалог</span>
-        </button>
-        <button class="icon-btn" id="themeBtn" aria-label="Переключить тему" title="Светлая / тёмная тема">
-          <svg viewBox="0 0 24 24" class="sun"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M5 19l1.5-1.5M17.5 6.5L19 5"/></svg>
+        <button class="ghost-btn" id="newChat" type="button">Новый диалог</button>
+        <button class="icon-btn" id="themeBtn" type="button" aria-label="Сменить тему">
+          <svg viewBox="0 0 24 24" class="sun"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/></svg>
           <svg viewBox="0 0 24 24" class="moon"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>
         </button>
       </div>
@@ -61,40 +74,38 @@
     <div class="banner" id="banner" hidden></div>
 
     <section class="thread" id="thread" aria-live="polite">
-      <div class="hero" id="hero">
-        <div class="hero-mark" aria-hidden="true">§</div>
-        <h1>Ответ со ссылкой на пункт — или честное «в базе этого нет»</h1>
-        <p>Ассистент отвечает только по документам базы знаний: договорам и регламентам компании и включённым в базу статьям законов. Каждое число, срок и ссылка в ответе сверяются с текстом документа.</p>
+      <div class="welcome" id="hero">
+        <h2>Спросите о договоре,<br>регламенте или норме закона</h2>
+        <p>Ответ строится только по документам базы. Каждое число, срок и ссылка сверяются с текстом — подтверждающий фрагмент открывается справа.</p>
         <div class="examples" id="examples"></div>
       </div>
     </section>
 
     <form class="composer" id="composer" autocomplete="off">
       <div class="composer-box">
-        <textarea id="input" rows="1" placeholder="Вопрос по документам: условия договора, согласование, норма закона…" maxlength="4000"></textarea>
+        <textarea id="input" rows="1" placeholder="Задайте вопрос по документам" maxlength="4000"></textarea>
         <button type="submit" class="send" id="send" aria-label="Отправить">
-          <svg viewBox="0 0 24 24"><path d="M5 12h13M12 5l7 7-7 7"/></svg>
+          <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
         </button>
       </div>
-      <div class="composer-hint">Enter — отправить · Shift+Enter — новая строка · ответ формируется только по базе знаний</div>
+      <div class="composer-hint">Enter — отправить · Shift + Enter — новая строка</div>
     </form>
   </main>
 
   <aside class="viewer" id="viewer" aria-label="Документ" hidden>
     <header class="viewer-head">
       <div class="viewer-titles">
-        <div class="viewer-kicker" id="viewerKicker"></div>
-        <h2 id="viewerTitle"></h2>
+        <div class="kicker" id="viewerKicker"></div>
+        <h3 id="viewerTitle"></h3>
         <div class="viewer-meta" id="viewerMeta"></div>
       </div>
-      <button class="icon-btn" id="viewerClose" aria-label="Закрыть документ">
+      <button class="icon-btn" id="viewerClose" type="button" aria-label="Закрыть документ">
         <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
     </header>
     <div class="viewer-tools" id="viewerTools"></div>
     <article class="doc" id="docBody"></article>
   </aside>
-
 </div>
 <div class="scrim" id="scrim" hidden></div>
 <script src="/static/app.js"></script>

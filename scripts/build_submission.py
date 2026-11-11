@@ -25,7 +25,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "submission"
 DIST = ROOT / "dist"
-ALLOWED = ROOT / "materials" / "requirements.txt"
+ALLOWED = ROOT / "data" / "allowed_requirements.txt"
 MAX_BYTES = 128 * 1024 * 1024
 SECRET_RE = re.compile(r"(sk-[A-Za-z0-9]{20,}|Bearer\s+[A-Za-z0-9_\-]{20,}|api[_-]?key\s*=\s*['\"][^'\"]{12,})", re.I)
 
@@ -45,7 +45,7 @@ def build() -> Path:
     allowed = {ln.strip() for ln in ALLOWED.read_text(encoding="utf-8").splitlines() if ln.strip()}
     for line in (SRC / "requirements.txt").read_text(encoding="utf-8").splitlines():
         if line.strip() and line.strip() not in allowed:
-            fail(f"зависимость {line.strip()!r} не из разрешённого списка materials/requirements.txt")
+            fail(f"зависимость {line.strip()!r} не из разрешённого списка data/allowed_requirements.txt")
     for p in files:
         text = p.read_text(encoding="utf-8")
         if SECRET_RE.search(text):
@@ -96,8 +96,8 @@ def smoke(archive: Path) -> None:
     (work / "data").mkdir()
     with zipfile.ZipFile(archive) as z:
         z.extractall(work)
-    shutil.copy(ROOT / "materials" / "knowledge-base.zip", work / "data" / "knowledge-base.zip")
-    shutil.copy(ROOT / "materials" / "demo_questions.csv", work / "data" / "questions.csv")
+    shutil.copy(ROOT / "data" / "knowledge-base.zip", work / "data" / "knowledge-base.zip")
+    shutil.copy(ROOT / "data" / "demo_questions.csv", work / "data" / "questions.csv")
     mock = subprocess.Popen([sys.executable, str(ROOT / "scripts" / "mock_llm.py"), "--port", str(port)],
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:

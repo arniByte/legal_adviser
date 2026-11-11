@@ -31,6 +31,8 @@ from la_pipeline import Assistant  # noqa: E402
 from la_retrieval import Retriever  # noqa: E402
 from la_text import fmt_date  # noqa: E402
 
+from app.cells import layout, short_label  # noqa: E402
+
 STATIC = Path(__file__).resolve().parent / "static"
 MAX_TURNS = 12
 MAX_CHARS = 4000
@@ -80,6 +82,7 @@ class State:
     dense_done = False
     started = time.time()
     kb_source = ""
+    cells = {}
 
 
 S = State()
@@ -89,12 +92,15 @@ def _load() -> None:
     S.settings = load_settings()
     explicit = os.getenv("KB_PATH", "").strip()
     source = Path(explicit) if explicit else find_kb_source(
-        S.settings.data_dir, (ROOT, ROOT / "data", ROOT / "materials"))
+        S.settings.data_dir, (ROOT / "data", ROOT))
     S.kb_source = source.name
     S.kb = load_kb(source)
     S.llm = LLMClient(S.settings)
     S.retriever = Retriever(S.kb, S.llm, S.settings)
     S.assistant = Assistant(S.kb, S.retriever, S.llm, S.settings)
+    S.cells = {c["id"]: c for c in layout([
+        {"id": d.doc_id, "size": d.size, "group": 0 if d.category == "company" else 1, "label": short_label(d)}
+        for d in S.kb.docs])}
 
     def warm() -> None:                       # vectors are built in the background; lexical search works meanwhile
         try:
@@ -149,7 +155,11 @@ def health() -> dict:
 
 @app.get("/api/documents")
 def documents() -> dict:
-    return {"documents": [_doc_summary(d) for d in S.kb.docs]}
+    docs = []
+    for d in S.kb.docs:
+        cell = S.cells.get(d.doc_id, {})
+        docs.append(dict(_doc_summary(d), cell={k: cell.get(k) for k in ("cx", "cy", "r", "path", "label")}))
+    return {"documents": docs}
 
 
 @app.get("/api/documents/{doc_id}")
