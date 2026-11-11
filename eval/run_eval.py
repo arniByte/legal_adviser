@@ -75,7 +75,7 @@ def load_devset(path: Path, only, limit) -> list:
 
 
 def run_ours(rows: list, settings, workers: int) -> dict:
-    kb = load_kb(ROOT / "materials" / "knowledge-base.zip")
+    kb = load_kb(ROOT / "data" / "knowledge-base.zip")
     llm = LLMClient(settings)
     retriever = Retriever(kb, llm, settings)
     dense = retriever.build_embeddings()
@@ -99,7 +99,7 @@ def run_ours(rows: list, settings, workers: int) -> dict:
 
 
 def run_baseline(rows: list, cache: Path) -> dict:
-    """Answers of the organisers' sample submission (materials/sample_submission) on the same questions."""
+    """Answers of the organisers' sample submission (data/sample_submission) on the same questions."""
     if cache.is_file():
         cached = json.loads(cache.read_text(encoding="utf-8"))
         if all(r["id"] in cached for r in rows):
@@ -107,13 +107,13 @@ def run_baseline(rows: list, cache: Path) -> dict:
             return cached
     work = Path(tempfile.mkdtemp(prefix="la_baseline_"))
     (work / "data").mkdir()
-    (work / "data" / "kb.zip").write_bytes((ROOT / "materials" / "knowledge-base.zip").read_bytes())
+    (work / "data" / "kb.zip").write_bytes((ROOT / "data" / "knowledge-base.zip").read_bytes())
     with (work / "data" / "questions.csv").open("w", encoding="utf-8", newline="") as f:
         w = csv.writer(f)
         w.writerow(["id", "question"])
         w.writerows([r["id"], r["question"]] for r in rows)
     env = dict(os.environ, DATA_DIR="data")
-    run = subprocess.run([sys.executable, str(ROOT / "materials" / "sample_submission" / "solution.py")], cwd=work,
+    run = subprocess.run([sys.executable, str(ROOT / "data" / "sample_submission" / "solution.py")], cwd=work,
                          env=env, capture_output=True, text=True, timeout=1500)
     if run.returncode != 0:
         raise RuntimeError("baseline failed: " + run.stderr[-400:])
@@ -200,7 +200,13 @@ def report(rows: list, ours: dict, base: dict, judged: dict, out_dir: Path, labe
                   f"**Score {total['score']:.3f}** = 0,7 × MatchRate {total['match_rate']:.3f} + 0,3 × WinRate "
                   f"{total['win_rate']:.3f} · побед {total['wins']}, ничьих {total['ties']}, поражений {total['losses']} "
                   f"из {total['n']} (ошибок судьи: {n - len(ok)})", "",
-                  "| Категория | n | MatchRate | WinRate | Score | П / Н / Пр |", "|---|---|---|---|---|---|"]
+                  "| Набор | n | MatchRate | WinRate | Score | П / Н / Пр |", "|---|---|---|---|---|---|"]
+        for src, title in (("organisers", "эталоны организаторов"), ("team", "эталоны команды")):
+            m = metrics([judged[r["id"]]["score"] for r in ok if r.get("source") == src])
+            if m["n"]:
+                lines.append(f"| {title} | {m['n']} | {m['match_rate']:.2f} | {m['win_rate']:.2f} | {m['score']:.2f} | "
+                             f"{m['wins']} / {m['ties']} / {m['losses']} |")
+        lines += ["", "| Категория | n | MatchRate | WinRate | Score | П / Н / Пр |", "|---|---|---|---|---|---|"]
         for cat in sorted({r["category"] for r in ok}):
             m = metrics([judged[r["id"]]["score"] for r in ok if r["category"] == cat])
             lines.append(f"| {cat} | {m['n']} | {m['match_rate']:.2f} | {m['win_rate']:.2f} | {m['score']:.2f} | "
