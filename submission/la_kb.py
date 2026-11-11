@@ -731,13 +731,41 @@ def render_law_full(doc: Doc) -> str:
     return "\n".join(lines)
 
 
+OUTLINE_LINE_CHARS = 170
+OUTLINE_MAX_CHARS = 4000
+
+
+def law_outline(doc: Doc, shown_units: set) -> str:
+    """Opening line of every top-level point that is not shown in full: the article's skeleton.
+
+    It lets the model see, for example, that point 3 sets the general rate even when the fragments
+    picked for the question are about other points.
+    """
+    for width in (OUTLINE_LINE_CHARS, OUTLINE_LINE_CHARS // 2):
+        lines = []
+        for u in doc.units:
+            if u.kind not in ("point", "part") or u.idx in shown_units:
+                continue
+            first = u.text.split("\n")[0].strip()
+            if len(first) > width:
+                first = first[:width].rsplit(" ", 1)[0] + " …"
+            lines.append(f"[{u.locator}] {first}" if u.locator else first)
+        text = "\n".join(lines)
+        if 0 < len(text) <= OUTLINE_MAX_CHARS:
+            return text
+    return ""
+
+
 def render_law_fragments(doc: Doc, chunks: list) -> str:
     head = (f"=== [{doc.doc_id}] {doc.title} | {law_status(doc)} | документ большой, "
-            f"показаны только релевантные фрагменты ===")
+            f"показаны оглавление и релевантные фрагменты ===")
     lines = [head]
     notes = doc.meta.get("doc_notes") or []
     if notes:
         lines.append("(примечания редакции к статье: " + " | ".join(n[:260] for n in notes[:3]) + ")")
+    outline = law_outline(doc, {c.unit_idx for c in chunks})
+    if outline:
+        lines += ["Начальные строки остальных пунктов статьи:", outline, "Релевантные фрагменты:"]
     last_unit = -1
     for ch in sorted(chunks, key=lambda c: c.seq):
         if last_unit != -1 and ch.unit_idx - last_unit > 1:
