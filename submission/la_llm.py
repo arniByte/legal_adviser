@@ -30,7 +30,7 @@ class LLMClient:
         self.lock = threading.Lock()
         self.stats = {"chat_calls": 0, "chat_errors": 0, "retries": 0, "prompt_tokens": 0, "completion_tokens": 0,
                       "cached_tokens": 0, "chat_seconds": 0.0, "embed_calls": 0, "rerank_calls": 0,
-                      "rate_limited": 0}
+                      "rate_limited": 0, "length_retries": 0, "truncated": 0}
         self.reranker_model = settings.reranker_model
         self.reranker_ok = None       # None = unknown, True / False after the first attempt
         self.embeddings_ok = None
@@ -102,6 +102,7 @@ class LLMClient:
                    "max_tokens": max_tokens}
         t0 = time.monotonic()
         self._bump("chat_calls")
+        partial = ""
         try:
             for round_no in range(2):
                 data = self._post("/chat/completions", self.s.llm_key, payload,
@@ -116,14 +117,23 @@ class LLMClient:
                 content = message.get("content")
                 if isinstance(content, list):          # content parts
                     content = "".join(p.get("text", "") for p in content if isinstance(p, dict))
-                if isinstance(content, str) and content.strip():
-                    return content.strip()
-                # reasoning models can spend the whole budget on thinking: retry once with more room
-                if round_no == 0 and (choice.get("finish_reason") == "length" or message.get("reasoning_content")
-                                      or message.get("reasoning")):
-                    payload["max_tokens"] = min(8192, max_tokens * 3)
+                text = content.strip() if isinstance(content, str) else ""
+                cut = choice.get("finish_reason") == "length"
+                if text and not cut:
+                    return text
+                # a reasoning model can spend the budget on thinking and stop mid-answer: retry once with more room
+                if round_no == 0 and (cut or message.get("reasoning_content") or message.get("reasoning")):
+                    self._bump("length_retries")
+                    payload["max_tokens"] = min(8192, max(max_tokens * 2, 4096))
+                    partial = text
                     continue
+                if text:
+                    self._bump("truncated")
+                    return text
                 break
+            if partial:
+                self._bump("truncated")
+                return partial
             raise LLMError("empty completion")
         except LLMError:
             self._bump("chat_errors")

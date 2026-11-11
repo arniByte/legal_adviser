@@ -200,6 +200,8 @@ def test_parse_output_variants():
     assert with_extra["answer"] == "Срок — 30 календарных дней (п. 4.2)." and "7.2" in with_extra["extra"]
     assert "0,1%" not in with_extra["answer"]                 # side notes never leak into the submitted answer
     assert parse_output("<answer>Да.</answer><extra>пусто</extra>")["extra"] == ""
+    cut = parse_output("<status>ANSWER</status><answer>Да. Порог — 10 000 000 рублей (п. 2.4). В действующей редакции от 01.03.2025")
+    assert cut["answer"] == "Да. Порог — 10 000 000 рублей (п. 2.4)."      # an unfinished sentence is dropped
 
 
 def test_word_cap_keeps_the_direct_answer_and_the_source():
@@ -278,8 +280,8 @@ def test_verifier_allows_user_numbers_and_arithmetic(kb):
 def _run_solution(tmp_path, port, extra_env=None, questions=None, mock_args=()):
     work = tmp_path / "run"
     (work / "data").mkdir(parents=True)
-    (work / "data" / "knowledge-base.zip").write_bytes((ROOT / "materials" / "knowledge-base.zip").read_bytes())
-    src = ROOT / "materials" / "demo_questions.csv"
+    (work / "data" / "knowledge-base.zip").write_bytes((ROOT / "data" / "knowledge-base.zip").read_bytes())
+    src = ROOT / "data" / "demo_questions.csv"
     if questions is None:
         (work / "data" / "questions.csv").write_bytes(src.read_bytes())
     else:
