@@ -217,6 +217,51 @@ def test_word_cap_keeps_the_direct_answer_and_the_source():
     assert len(trim_answer(steps)[0].split()) > 110             # enumerated steps get a higher cap
 
 
+class _ScriptedLLM:
+    """Stands in for the model in the editing pass: returns a prepared reply or fails."""
+
+    def __init__(self, reply=None, error=None):
+        self.reply, self.error, self.calls = reply, error, 0
+
+    def chat(self, messages, **_):
+        self.calls += 1
+        if self.error:
+            raise self.error
+        return self.reply
+
+
+def test_editing_pass_can_only_delete():
+    from la_edit import edit_answer, fragments
+    from la_llm import LLMError
+    answer = ("Покупатель оплачивает товар в течение 30 календарных дней (п. 4.2). Дополнительное соглашение № 1 "
+              "порядок расчётов не изменяет; расчёты безналичные (п. 4.1). Источник: договор № П-17/2024, п. 4.2.")
+    assert len(fragments(answer)) == 4
+    # the model asks to delete everything: the direct answer and the source line stay anyway
+    kept, removed = edit_answer(_ScriptedLLM('{"delete": [1, 2, 3, 4, 9], "why": "x"}'), "Какой срок оплаты?", answer)
+    assert kept == "Покупатель оплачивает товар в течение 30 календарных дней (п. 4.2). Источник: договор № П-17/2024, п. 4.2."
+    assert "Дополнительное соглашение" in removed and "безналичные" in removed
+    assert set(kept.split()) <= set(answer.split())             # no word that was not in the answer
+    # a clause cut after a semicolon leaves a proper sentence end
+    kept, _ = edit_answer(_ScriptedLLM('{"delete": [3]}'), "Какой срок оплаты?", answer)
+    assert "не изменяет. Источник" in kept
+    # anything unusable leaves the answer exactly as it was
+    for llm in (_ScriptedLLM("удалить второй фрагмент"), _ScriptedLLM('{"delete": "все"}'), _ScriptedLLM('{"delete": []}'),
+                _ScriptedLLM(error=LLMError("timeout"))):
+        assert edit_answer(llm, "Какой срок оплаты?", answer) == (answer, "")
+
+
+def test_editing_pass_keeps_steps_and_most_of_the_answer():
+    from la_edit import edit_answer
+    steps = "До подписания нужно: 1) пройти проверку юридическим отделом (п. 5.4); 2) получить заключение комплаенс."
+    llm = _ScriptedLLM('{"delete": [2]}')
+    assert edit_answer(llm, "Что сделать до подписания?", steps) == (steps, "") and llm.calls == 0   # nothing editable
+    dated = ("Да, порог тогда был 10 000 000 рублей (п. 2.4). В действующей редакции порог — 15 000 000 рублей. "
+             "Повышение возможно (п. 3.4), но документов о нём в базе нет.")
+    assert edit_answer(_ScriptedLLM('{"delete": [2, 3]}'), "Нужно ли было одобрение в 2024 году?", dated) == (dated, "")
+    short = "Да (п. 2.4). " + "Смежное положение регламента о порядке согласования договоров. " * 3
+    assert edit_answer(_ScriptedLLM('{"delete": [2, 3, 4]}'), "Нужно ли одобрение?", short.strip())[1] == ""
+
+
 def test_prompt_examples_follow_their_own_rules(kb):
     """Few-shot answers must be short and must pass the verifier: the model copies what it sees."""
     from la_prompts import EXAMPLES, _resolve, build_system

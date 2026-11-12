@@ -15,6 +15,7 @@ import re
 import time
 from dataclasses import dataclass, field
 
+from la_edit import EDITABLE_STATUSES, edit_answer
 from la_kb import company_status, normalize_docnum, twins_of
 from la_llm import LLMError
 from la_prompts import REPAIR_TEMPLATE, build_system, build_user, parse_output, trim_answer
@@ -262,6 +263,7 @@ class AnswerResult:
     checked_numbers: int = 0
     extra: str = ""            # related provisions the user did not ask about (shown in the UI, not in the submission)
     trimmed: bool = False      # the answer exceeded the word cap and its tail was moved to `extra`
+    edited: bool = False       # the editing pass removed side facts; they were moved to `extra` as well
 
 
 class Assistant:
@@ -363,6 +365,14 @@ class Assistant:
         if overflow:                                   # nothing is lost: the tail moves to the side notes
             result.trimmed = True
             extra = (overflow + " " + extra).strip()
+        if full and self.s.edit and parsed["status"] in EDITABLE_STATUSES and self._time_left(deadline) > 20:
+            stage("edit")
+            t = time.monotonic()
+            answer, removed = edit_answer(self.llm, raw_question, answer, deadline=deadline)
+            if removed:
+                result.edited = True
+                extra = (removed + " " + extra).strip()
+            timings["edit"] = round(time.monotonic() - t, 3)
         result.extra = extra[:2000]
         result.answer = answer[:9500]
         result.status = parsed["status"]
