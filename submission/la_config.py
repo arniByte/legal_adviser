@@ -92,6 +92,6 @@ def load_settings() -> Settings:
         use_reranker=env_flag("LA_USE_RERANKER", True),
         second_pass=env_flag("LA_SECOND_PASS", True),
         repair=env_flag("LA_REPAIR", True),
-        edit=env_flag("LA_EDIT", True),
+        edit=env_flag("LA_EDIT", False),
         cache_dir=Path(env("LA_CACHE_DIR", "/tmp/la_cache")),
     )

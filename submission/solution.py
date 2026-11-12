@@ -3,7 +3,8 @@
 The run is built to always leave a valid submission.csv behind:
   * a complete file with safe placeholder answers is written before the first API call;
   * answers are flushed as they arrive;
-  * a time budget degrades the pipeline (full -> lite -> placeholder) instead of timing out;
+  * a time budget degrades the pipeline (full -> lite -> placeholder) instead of timing out; the choice is
+    made from the measured speed of this run, so a fast API keeps every question in full mode;
   * a watchdog writes the file and exits if something hangs.
 """
 
@@ -104,6 +105,57 @@ def diagnostics(s, questions: list) -> None:
         f"python {sys.version.split()[0]}; cpu {os.cpu_count()}")
 
 
+class Pacer:
+    """Chooses the mode of each question from the speed this run has actually shown.
+
+    A fixed seconds-per-question threshold sent questions to the reduced mode as soon as the question count
+    was large, even when the API was fast and most of the budget was left unused. Here the time a mode
+    needs is learned from finished questions (starting from cautious priors) and the full mode is kept
+    while the remaining questions still fit into the remaining time.
+    """
+
+    PRIORS = {"full": 20.0, "lite": 8.0}    # seconds per question before anything is measured (cautious)
+    PRIOR_WEIGHT = 1                         # the priors count as this many observations
+    MARGIN = 0.85                            # plan to use at most this share of the remaining time
+    MIN_LITE = 7.0                           # below this many seconds per question even lite does not fit
+
+    def __init__(self, deadline: float, workers: int):
+        self.deadline = deadline
+        self.workers = max(1, workers)
+        self.sums = {m: p * self.PRIOR_WEIGHT for m, p in self.PRIORS.items()}
+        self.counts = {m: self.PRIOR_WEIGHT for m in self.PRIORS}
+        self.probes = 0                      # full-mode questions started to measure the full mode
+        self.lock = threading.Lock()
+
+    def estimate(self, mode: str) -> float:
+        with self.lock:
+            return self.sums[mode] / self.counts[mode]
+
+    def record(self, mode: str, seconds: float) -> None:
+        if mode in self.sums and seconds > 0:
+            with self.lock:
+                self.sums[mode] += seconds
+                self.counts[mode] += 1
+
+    def choose(self, pending: int, now: float = None) -> tuple:
+        """(mode, seconds per question available) for a question when `pending` questions, it included, are left."""
+        now = time.monotonic() if now is None else now
+        remaining = self.deadline - now
+        per_question = remaining * self.workers / max(pending, 1)
+        if remaining < 6:
+            return "skip", per_question
+        budget = remaining * self.MARGIN
+        with self.lock:                      # measure the full mode first: a cautious prior must not lock it out
+            observed = self.counts["full"] - self.PRIOR_WEIGHT
+            if observed < self.workers and self.probes < 2 * self.workers and per_question >= self.MIN_LITE:
+                self.probes += 1
+                return "full", per_question
+        for mode in ("full", "lite"):
+            if pending * self.estimate(mode) / self.workers <= budget:
+                return mode, per_question
+        return ("lite" if per_question >= self.MIN_LITE else "skip"), per_question
+
+
 def main() -> int:
     s = load_settings()
     questions = load_questions(find_questions(s.data_dir))
@@ -141,6 +193,7 @@ def main() -> int:
     log(f"search: lexical{' + dense' if dense else ''}; model {s.llm_model}; embeddings {s.emb_model}")
 
     assistant = Assistant(kb, retriever, llm, s)
+    pacer = Pacer(deadline, s.max_workers)
     state = {"started": 0, "done": 0, "modes": {}, "status": {}, "passes": 0, "repaired": 0, "issues": 0,
              "seconds": [], "errors": 0, "words": [], "extra": 0, "trimmed": 0, "edited": 0}
     total = len(questions)
@@ -150,14 +203,14 @@ def main() -> int:
         with lock:
             pending = total - state["started"]
             state["started"] += 1
-        remaining = deadline - time.monotonic()
-        per_question = remaining * s.max_workers / max(pending, 1)
-        mode = "full" if per_question >= 22 else ("lite" if per_question >= 7 else "skip")
-        if mode == "skip" or remaining < 6:
+        mode, per_question = pacer.choose(pending)
+        if mode == "skip":
             return position, None, "skip"
         q_deadline = min(deadline, time.monotonic() + max(25.0, min(150.0, per_question * 2.5)))
+        started = time.monotonic()
         try:
             result = assistant.answer(question, qvec=qvecs[position], deadline=q_deadline, mode=mode)
+            pacer.record(mode, time.monotonic() - started)
             return position, result, mode
         except Exception as exc:  # nothing may break the run
             log(f"question #{position + 1}: {type(exc).__name__}: {str(exc)[:120]}")
@@ -207,6 +260,7 @@ def main() -> int:
         f"answers with side notes kept out: {state['extra']}; trimmed by the word cap: {state['trimmed']}; "
         f"shortened by the editing pass: {state['edited']}")
     print(f"submission.csv: {len(answers)}/{total} answers", flush=True)
+    log(f"pacing: seconds per question measured full {pacer.estimate('full'):.1f}, lite {pacer.estimate('lite'):.1f}")
     log(f"done: {len(answers)}/{total} answers; modes {state['modes']}; statuses {state['status']}; "
         f"llm calls {st['chat_calls']} (errors {st['chat_errors']}, retries {st['retries']}, 429: {st['rate_limited']}, "
         f"length retries {st['length_retries']}, truncated {st['truncated']}); "
