@@ -369,6 +369,37 @@ def test_end_to_end_survives_api_failures_and_repairs(tmp_path):
     assert "777" not in answers["a"] and "99.9" not in answers["a"]     # the invented number never ships
 
 
+def test_pacer_keeps_full_mode_when_the_api_is_fast():
+    from solution import Pacer
+    # 300 questions, 4 workers, 16 minutes, the API answers a full question in 6 s: everything fits in full mode
+    p = Pacer(deadline=960.0, workers=4)
+    modes, now = [], 0.0
+    for pending in range(300, 0, -1):
+        mode, _ = p.choose(pending, now=now)
+        modes.append(mode)
+        p.record(mode, 6.0 if mode == "full" else 3.0)
+        now += (6.0 if mode == "full" else 3.0) / 4
+    assert modes.count("full") == 300
+    # the old rule (22 s per question per worker) would have sent this run to the reduced mode from the start
+    assert 960 * 4 / 300 < 22
+
+
+def test_pacer_degrades_when_the_api_is_slow():
+    from solution import Pacer
+    p = Pacer(deadline=1200.0, workers=2)
+    modes, now = [], 0.0
+    for pending in range(200, 0, -1):
+        mode, _ = p.choose(pending, now=now)
+        modes.append(mode)
+        cost = {"full": 30.0, "lite": 8.0, "skip": 0.0}[mode]
+        p.record(mode, cost)
+        now += cost / 2
+    assert modes[:2] == ["full", "full"]                      # the full mode is measured first
+    assert modes.count("lite") > modes.count("full")          # then the run saves time
+    assert modes[-1] == "full"                                # and spends what is left on quality at the end
+    assert "skip" not in modes and now <= 1200.0             # and still answers everything in time
+
+
 def test_time_budget_degrades_instead_of_timing_out(tmp_path):
     questions = [(str(i), f"Какая арендная плата по договору аренды? Вариант {i}") for i in range(40)]
     t0 = time.time()
