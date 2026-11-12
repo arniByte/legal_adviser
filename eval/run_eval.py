@@ -1,7 +1,8 @@
 """Local evaluation that mirrors the organisers' LLM-as-judge protocol.
 
-    python eval/run_eval.py                 # our answers + baseline + judge + report
-    python eval/run_eval.py --no-judge      # quick checks only (no judge calls)
+    python eval/run_eval.py --label v7                  # our answers + judge + report
+    python eval/run_eval.py --no-judge                  # quick checks only (no judge calls)
+    python eval/run_eval.py --answers v7 --repeats 3    # judge the saved answers of run "v7" again, three times
     python eval/run_eval.py --limit 10 --only temporal,twins
 
 Needs the same environment as the solution (LLM_BASE_URL, LLM_API_KEY, LLM_MODEL ...).
@@ -13,8 +14,13 @@ What is reproduced from the technical regulation:
   * scale 1 / 0.75 / 0.5 / 0.25 / 0 relative to the baseline, question score = mean of two rounds;
   * an invented fact zeroes the question;
   * MatchRate = mean score, WinRate = W / (W + L), Score = 0.7 * MatchRate + 0.3 * WinRate.
-The organisers' judge prompt, baseline and questions are not public, so absolute numbers
-will differ from the leaderboard; the tool is for comparing our own versions.
+The organisers' judge prompt, baseline and questions are not public, so absolute numbers differ from
+the leaderboard. Two baselines bracket the unknown one: the organisers' starter submission (weak) and
+the reference answer itself (the strongest possible). A change is an improvement only if it helps
+against the first and does not hurt against the second.
+
+Both the model and the judge vary between runs, so one run proves little: compare versions on several
+judge repeats (--repeats) and, for the final decision, on more than one generation run.
 """
 
 from __future__ import annotations
@@ -117,7 +123,7 @@ def run_ours(rows: list, settings, workers: int) -> dict:
         return {"answer": r.answer, "status": r.status, "passes": r.passes, "repaired": r.repaired,
                 "hard_issues": [x["detail"] for x in r.issues if x["hard"]], "seconds": r.timings.get("total", 0.0),
                 "error": r.error, "sources": [f"{s['doc_id']} {s['locator']}" for s in r.sources],
-                "analysis": r.analysis}
+                "analysis": r.analysis, "edited": r.edited}
 
     with ThreadPoolExecutor(max_workers=workers) as pool:
         out = list(pool.map(one, range(len(rows))))
@@ -173,12 +179,16 @@ def judge_pair(judge: LLMClient, question: str, golden: str, a: str, b: str) -> 
     return {"error": last}
 
 
-def judge_all(rows: list, ours: dict, base: dict, settings, workers: int) -> dict:
+def make_judge(settings) -> LLMClient:
     js = load_settings()
     js.llm_model = os.getenv("JUDGE_MODEL", "").strip() or settings.llm_model
     js.api_base = (os.getenv("JUDGE_BASE_URL", "").strip() or settings.api_base).rstrip("/")
     js.llm_key = os.getenv("JUDGE_API_KEY", "").strip() or settings.llm_key
-    judge = LLMClient(js)
+    return LLMClient(js)
+
+
+def judge_all(rows: list, ours: dict, base: dict, judge: LLMClient, workers: int) -> dict:
+    """One pass of the judge over all questions: {id: verdict}."""
 
     def one(row: dict) -> dict:
         ans, bas = ours[row["id"]]["answer"], base[row["id"]]
@@ -188,12 +198,12 @@ def judge_all(rows: list, ours: dict, base: dict, settings, workers: int) -> dic
             return {"error": r1.get("error") or r2.get("error")}
         s1, s2 = r1["score"], 1.0 - r2["score"]
         fabricated = r1["fab_b"] or r2["fab_a"]
-        return {"score": 0.0 if fabricated else (s1 + s2) / 2, "rounds": [s1, s2], "fabricated": fabricated,
-                "baseline_fabricated": r1["fab_a"] or r2["fab_b"], "reasons": [r1["reason"], r2["reason"]]}
+        return {"score": 0.0 if fabricated else (s1 + s2) / 2, "raw": (s1 + s2) / 2, "rounds": [s1, s2],
+                "fabricated": fabricated, "baseline_fabricated": r1["fab_a"] or r2["fab_b"],
+                "reasons": [r1["reason"], r2["reason"]]}
 
     with ThreadPoolExecutor(max_workers=workers) as pool:
         out = list(pool.map(one, rows))
-    print(f"judge ({js.llm_model}): {judge.stats['chat_calls']} calls", flush=True)
     return {rows[i]["id"]: out[i] for i in range(len(rows))}
 
 
@@ -208,7 +218,38 @@ def metrics(scores: list) -> dict:
             "score": round(0.7 * mr + 0.3 * wr, 4), "wins": wins, "losses": losses, "ties": len(scores) - wins - losses}
 
 
-def report(rows: list, ours: dict, base: dict, judged: dict, out_dir: Path, label: str) -> None:
+def pooled(repeats: list, rid: str) -> dict:
+    """Verdicts of several judge repeats for one question, folded into one."""
+    vs = [rep[rid] for rep in repeats if "score" in rep.get(rid, {})]
+    if not vs:
+        return {}
+    return {"score": sum(v["score"] for v in vs) / len(vs), "fabricated": any(v["fabricated"] for v in vs),
+            "reasons": vs[0]["reasons"]}
+
+
+def judge_table(rows: list, verdicts: dict) -> list:
+    """One line per judge repeat and a mean per baseline."""
+    lines = ["| Baseline | Прогон судьи | Score | MatchRate | WinRate | П / Н / Пр | Обнулено | Score без обнуления |",
+             "|---|---|---|---|---|---|---|---|"]
+    for name, repeats in verdicts.items():
+        scores, zeroed, clean = [], [], []
+        for k, rep in enumerate(repeats, 1):
+            ok = [rep[r["id"]] for r in rows if "score" in rep[r["id"]]]
+            m, raw = metrics([v["score"] for v in ok]), metrics([v["raw"] for v in ok])
+            z = sum(1 for v in ok if v["fabricated"])
+            scores.append(m["score"])
+            zeroed.append(z)
+            clean.append(raw["score"])
+            lines.append(f"| {name} | {k} | {m['score']:.3f} | {m['match_rate']:.3f} | {m['win_rate']:.3f} | "
+                         f"{m['wins']} / {m['ties']} / {m['losses']} | {z} | {raw['score']:.3f} |")
+        if len(repeats) > 1:
+            lines.append(f"| **{name}** | **среднее** | **{sum(scores) / len(scores):.3f}** | | | | "
+                         f"**{sum(zeroed) / len(zeroed):.1f}** | **{sum(clean) / len(clean):.3f}** |")
+    return lines
+
+
+def report(rows: list, ours: dict, bases: dict, verdicts: dict, out_dir: Path, label: str) -> None:
+    """bases: {baseline name: {id: answer}}; verdicts: {baseline name: [one {id: verdict} per judge repeat]}."""
     lines = [f"# Локальная оценка: {label}", ""]
     checks = {r["id"]: quick_checks(r, ours[r["id"]]["answer"]) for r in rows}
     fs = fact_scores(rows, ours)
@@ -219,35 +260,40 @@ def report(rows: list, ours: dict, base: dict, judged: dict, out_dir: Path, labe
               f"- не хватает обязательных элементов (`must`): {sum(1 for c in checks.values() if c['missing'])}",
               f"- есть запрещённые утверждения (`must_not`): {sum(1 for c in checks.values() if c['violated'])}",
               f"- вторых проходов: {sum(1 for r in rows if ours[r['id']]['passes'] > 1)}; исправлений: "
-              f"{sum(1 for r in rows if ours[r['id']]['repaired'])}",
+              f"{sum(1 for r in rows if ours[r['id']]['repaired'])}; сокращено редактором: "
+              f"{sum(1 for r in rows if ours[r['id']].get('edited'))}",
               f"- факты против эталона: точность {fs['precision']:.3f}, полнота {fs['recall']:.3f}, F1 {fs['f1']:.3f}; "
               f"лишних фактов {fs['extra']}, недостающих {fs['missed']}",
               f"- слов в ответе, медиана: {sorted(c['words'] for c in checks.values())[n // 2]} (в эталонах: "
               f"{sorted(len(r['golden'].split()) for r in rows)[n // 2]}); секунд на вопрос, "
               f"медиана: {sorted(ours[r['id']]['seconds'] for r in rows)[n // 2]:.1f}", ""]
-    if judged:
-        ok = [r for r in rows if "score" in judged[r["id"]]]
-        total = metrics([judged[r["id"]]["score"] for r in ok])
-        lines += ["## Судья", "",
-                  f"**Score {total['score']:.3f}** = 0,7 × MatchRate {total['match_rate']:.3f} + 0,3 × WinRate "
-                  f"{total['win_rate']:.3f} · побед {total['wins']}, ничьих {total['ties']}, поражений {total['losses']} "
-                  f"из {total['n']} (ошибок судьи: {n - len(ok)})", "",
-                  "| Набор | n | MatchRate | WinRate | Score | П / Н / Пр |", "|---|---|---|---|---|---|"]
+    main_name = next(iter(verdicts), "")
+    main_runs = verdicts.get(main_name, [])
+    if verdicts:
+        lines += ["## Судья", ""] + judge_table(rows, verdicts) + [
+            "", "«Обнулено» — ответы, в которых судья увидел выдуманный факт: такой вопрос получает 0. Судья не видит "
+                "базу знаний, поэтому выдумкой считает и верное положение, которого нет в эталоне.", "",
+            f"Разбивка ниже — против baseline «{main_name}», по всем прогонам судьи.", "",
+            "| Набор | n | MatchRate | WinRate | Score | П / Н / Пр |", "|---|---|---|---|---|---|"]
+
+        def group(select) -> dict:
+            return metrics([rep[r["id"]]["score"] for rep in main_runs for r in rows
+                            if select(r) and "score" in rep[r["id"]]])
+
         for src, title in (("organisers", "эталоны организаторов"), ("team", "эталоны команды")):
-            m = metrics([judged[r["id"]]["score"] for r in ok if r.get("source") == src])
+            m = group(lambda r: r.get("source") == src)
             if m["n"]:
                 lines.append(f"| {title} | {m['n']} | {m['match_rate']:.2f} | {m['win_rate']:.2f} | {m['score']:.2f} | "
                              f"{m['wins']} / {m['ties']} / {m['losses']} |")
         lines += ["", "| Категория | n | MatchRate | WinRate | Score | П / Н / Пр |", "|---|---|---|---|---|---|"]
-        for cat in sorted({r["category"] for r in ok}):
-            m = metrics([judged[r["id"]]["score"] for r in ok if r["category"] == cat])
+        for cat in sorted({r["category"] for r in rows}):
+            m = group(lambda r: r["category"] == cat)
             lines.append(f"| {cat} | {m['n']} | {m['match_rate']:.2f} | {m['win_rate']:.2f} | {m['score']:.2f} | "
                          f"{m['wins']} / {m['ties']} / {m['losses']} |")
-        lines += ["", f"Выдуманный факт у нас: {sum(1 for r in ok if judged[r['id']]['fabricated'])}; у baseline: "
-                      f"{sum(1 for r in ok if judged[r['id']]['baseline_fabricated'])}", ""]
+        lines.append("")
     lines += ["## Что смотреть в первую очередь", ""]
     for r in rows:
-        j = judged.get(r["id"], {}) if judged else {}
+        j = pooled(main_runs, r["id"])
         c = checks[r["id"]]
         flagged = (j.get("score", 1.0) < 0.5) or c["missing"] or c["violated"] or ours[r["id"]]["hard_issues"] \
             or ours[r["id"]]["error"]
@@ -256,8 +302,8 @@ def report(rows: list, ours: dict, base: dict, judged: dict, out_dir: Path, labe
         lines += [f"### {r['id']} · {r['category']}" + (f" · балл {j['score']:.2f}" if "score" in j else ""), "",
                   f"**Вопрос:** {r['question']}", "", f"**Эталон:** {r['golden']}", "",
                   f"**Наш ответ ({ours[r['id']]['status']}):** {ours[r['id']]['answer']}", ""]
-        if base:
-            lines += [f"**Baseline:** {base[r['id']]}", ""]
+        if main_name and main_name != "golden":
+            lines += [f"**Baseline:** {bases[main_name][r['id']]}", ""]
         notes = []
         if c["missing"]:
             notes.append("нет: " + ", ".join(c["missing"]))
@@ -265,6 +311,8 @@ def report(rows: list, ours: dict, base: dict, judged: dict, out_dir: Path, labe
             notes.append("запрещено: " + ", ".join(c["violated"]))
         if ours[r["id"]]["hard_issues"]:
             notes.append("верификатор: " + "; ".join(ours[r["id"]]["hard_issues"]))
+        if j.get("fabricated"):
+            notes.append("судья увидел выдуманный факт")
         if j.get("reasons"):
             notes.append("судья: " + " / ".join(j["reasons"]))
         if ours[r["id"]]["error"]:
@@ -273,11 +321,12 @@ def report(rows: list, ours: dict, base: dict, judged: dict, out_dir: Path, labe
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "report.md").write_text("\n".join(lines), encoding="utf-8")
     (out_dir / "answers.json").write_text(json.dumps(
-        {"ours": ours, "baseline": base, "judge": judged}, ensure_ascii=False, indent=1), encoding="utf-8")
+        {"ours": ours, "baselines": {k: v for k, v in bases.items() if k != "golden"}, "judge": verdicts},
+        ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"report: {out_dir / 'report.md'}")
     print("\n".join(lines[2:14]))
-    if judged:
-        print("\n".join(l for l in lines if l.startswith("**Score")))
+    if verdicts:
+        print("\n".join(judge_table(rows, verdicts)))
 
 
 def main() -> None:
@@ -286,29 +335,39 @@ def main() -> None:
     ap.add_argument("--only", default="", help="comma-separated categories or ids")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--no-judge", action="store_true")
-    ap.add_argument("--no-baseline", action="store_true")
-    ap.add_argument("--baseline", choices=["sample", "golden"], default="golden",
-                    help="golden: the reference answer plays the baseline (a strong baseline, as on the platform, "
-                         "where every team scores below 0.5); sample: the organisers' starter submission")
+    ap.add_argument("--baseline", choices=["both", "sample", "golden"], default="both",
+                    help="sample: the organisers' starter submission (a weak baseline); golden: the reference answer "
+                         "plays the baseline (the strongest possible one); both: judge against each")
+    ap.add_argument("--repeats", type=int, default=1, help="judge passes per baseline; the judge varies between runs")
+    ap.add_argument("--answers", default="", help="label of an earlier run: judge its saved answers, do not generate")
     ap.add_argument("--workers", type=int, default=4)
-    ap.add_argument("--label", default=time.strftime("%Y%m%d-%H%M%S"))
+    ap.add_argument("--label", default="")
     args = ap.parse_args()
 
     settings = load_settings()
     if not settings.has_api:
         sys.exit("Задайте LLM_BASE_URL и LLM_API_KEY (см. .env.example).")
     rows = load_devset(Path(args.devset), {x for x in args.only.split(",") if x}, args.limit)
-    out_dir = Path(__file__).resolve().parent / "runs" / args.label
-    ours = run_ours(rows, settings, args.workers)
-    base, judged = {}, {}
-    if not args.no_judge and not args.no_baseline:
-        if args.baseline == "golden":
-            base = {r["id"]: r["golden"] for r in rows}
-        else:
+    runs = Path(__file__).resolve().parent / "runs"
+    label = args.label or args.answers or time.strftime("%Y%m%d-%H%M%S")
+    if args.answers:
+        ours = json.loads((runs / args.answers / "answers.json").read_text(encoding="utf-8"))["ours"]
+        rows = [r for r in rows if r["id"] in ours]
+    else:
+        ours = run_ours(rows, settings, args.workers)
+
+    bases, verdicts = {}, {}
+    if not args.no_judge:
+        if args.baseline in ("both", "sample"):
             safe = re.sub(r"[^0-9A-Za-z]+", "_", settings.llm_model)
-            base = run_baseline(rows, Path(__file__).resolve().parent / "runs" / f"baseline_{safe}.json")
-        judged = judge_all(rows, ours, base, settings, args.workers)
-    report(rows, ours, base, judged, out_dir, args.label)
+            bases["sample"] = run_baseline(rows, runs / f"baseline_{safe}.json")
+        if args.baseline in ("both", "golden"):
+            bases["golden"] = {r["id"]: r["golden"] for r in rows}
+        judge = make_judge(settings)
+        for name, base in bases.items():
+            verdicts[name] = [judge_all(rows, ours, base, judge, args.workers) for _ in range(args.repeats)]
+        print(f"judge ({judge.s.llm_model}): {judge.stats['chat_calls']} calls", flush=True)
+    report(rows, ours, bases, verdicts, runs / label, label)
 
 
 if __name__ == "__main__":

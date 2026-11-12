@@ -17,8 +17,8 @@
     copy: svg('<rect x="8.5" y="8.5" width="11" height="11" rx="2.5"/><path d="M15.5 8.5V6.5a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h2"/>'),
     done: svg('<path d="M5 12.5l4.5 4.5L19 7.5"/>'),
   };
-  const STAGES = { retrieval: "Ищу в документах", generation: "Формулирую ответ", second_pass: "Ищу шире", verification: "Сверяю с текстом", repair: "Уточняю ответ" };
-  const STEP_NAMES = { retrieval: "Поиск по базе", generation: "Ответ модели", second_pass: "Расширенный поиск", verification: "Сверка с текстом" };
+  const STAGES = { retrieval: "Ищу в документах", generation: "Формулирую ответ", second_pass: "Ищу шире", verification: "Сверяю с текстом", repair: "Уточняю ответ", edit: "Убираю лишнее" };
+  const STEP_NAMES = { retrieval: "Поиск по базе", generation: "Ответ модели", second_pass: "Расширенный поиск", verification: "Сверка с текстом", edit: "Редактура" };
   const STATE_TEXT = { PARTIAL: "Подтверждено частично", NOT_IN_KB: "В базе нет сведений", OFF_TOPIC: "Вне юридической темы", ILLEGAL: "Не могу помочь", ROLE: "Правила не меняются", ERROR: "Техническая ошибка" };
   const HUES = ["#b8a6ff", "#9cc6ff", "#9fe2c3", "#ffb38c", "#ff9ec4"];
 

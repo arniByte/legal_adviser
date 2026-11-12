@@ -88,6 +88,9 @@ def embed(text: str, dim: int = 128) -> list:
 def chat(messages: list) -> str:
     user = next((m["content"] for m in messages if m["role"] == "user"), "")
     last = messages[-1]["content"] if messages else ""
+    if messages and messages[0]["content"].startswith("Ты — редактор"):
+        extra = re.findall(r"\[(\d+)\] Дополнительное соглашение[^\n]*не изменя", user)
+        return json.dumps({"delete": [int(x) for x in extra], "why": "mock"})
     if "Автоматическая проверка нашла" in last:
         STATE["repairs"] += 1
         return ("<analysis>Исправление: неподтверждённое число убрано.</analysis>\n<status>NOT_IN_KB</status>\n"

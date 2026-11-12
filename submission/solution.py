@@ -142,7 +142,7 @@ def main() -> int:
 
     assistant = Assistant(kb, retriever, llm, s)
     state = {"started": 0, "done": 0, "modes": {}, "status": {}, "passes": 0, "repaired": 0, "issues": 0,
-             "seconds": [], "errors": 0, "words": [], "extra": 0, "trimmed": 0}
+             "seconds": [], "errors": 0, "words": [], "extra": 0, "trimmed": 0, "edited": 0}
     total = len(questions)
 
     def work(position: int):
@@ -182,6 +182,7 @@ def main() -> int:
                     state["words"].append(len(result.answer.split()))
                     state["extra"] += int(bool(result.extra))
                     state["trimmed"] += int(result.trimmed)
+                    state["edited"] += int(result.edited)
                     state["errors"] += int(bool(result.error))
                     if state["done"] == 1:
                         log(f"first answer: {result.timings}; status {result.status}; passes {result.passes}; "
@@ -203,7 +204,8 @@ def main() -> int:
         f"{state['errors']}; reranker model {llm.reranker_model or '-'}; dense search {'on' if dense else 'off'}")
     words = sorted(state["words"]) or [0]
     log(f"answer words p50/p90/max: {words[len(words) // 2]}/{words[int(len(words) * 0.9) - 1]}/{words[-1]}; "
-        f"answers with side notes kept out: {state['extra']}; trimmed by the word cap: {state['trimmed']}")
+        f"answers with side notes kept out: {state['extra']}; trimmed by the word cap: {state['trimmed']}; "
+        f"shortened by the editing pass: {state['edited']}")
     print(f"submission.csv: {len(answers)}/{total} answers", flush=True)
     log(f"done: {len(answers)}/{total} answers; modes {state['modes']}; statuses {state['status']}; "
         f"llm calls {st['chat_calls']} (errors {st['chat_errors']}, retries {st['retries']}, 429: {st['rate_limited']}, "
