@@ -19,7 +19,7 @@
   };
   const STAGES = { retrieval: "Ищу в документах", generation: "Формулирую ответ", second_pass: "Ищу шире", verification: "Сверяю с текстом", repair: "Уточняю ответ", edit: "Убираю лишнее" };
   const STEP_NAMES = { retrieval: "Поиск по базе", generation: "Ответ модели", second_pass: "Расширенный поиск", verification: "Сверка с текстом", edit: "Редактура" };
-  const STATE_TEXT = { PARTIAL: "Подтверждено частично", NOT_IN_KB: "В базе нет сведений", OFF_TOPIC: "Вне юридической темы", ILLEGAL: "Не могу помочь", ROLE: "Правила не меняются", ERROR: "Техническая ошибка" };
+  const STATE_TEXT = { PARTIAL: "Подтверждено частично", NOT_IN_KB: "В базе нет сведений", OFF_TOPIC: "Вне юридической темы", ILLEGAL: "Не могу помочь", ROLE: "Правила не меняются", ERROR: "Не удалось подготовить проверенный ответ" };
   const HUES = ["#b8a6ff", "#9cc6ff", "#9fe2c3", "#ffb38c", "#ff9ec4"];
 
   const state = { messages: [], docs: [], byId: {}, busy: false, apiReady: false };
@@ -204,18 +204,19 @@
     });
 
     const c = r.checks;
-    if (r.status !== "OFF_TOPIC") {
+    if (r.status !== "OFF_TOPIC" && (r.sources.length || c.hard_issues.length || ["ANSWER", "PARTIAL"].includes(r.status))) {
       const seal = el("button", "seal" + (c.verified ? "" : " warn"));
       seal.type = "button";
-      seal.innerHTML = (c.verified ? ICON.check : ICON.warn) + `<span>${c.verified ? "Сверено с документами" : "Проверьте ответ"}</span>`;
+      seal.innerHTML = (c.verified ? ICON.check : ICON.warn) + `<span>${c.verified ? "Проверены ссылки и значения" : "Проверьте ответ"}</span>`;
       seal.style.animationDelay = (0.3 + r.sources.length * 0.06) + "s";
       hover(seal, () => {
         const box = el("div");
         if (c.verified) {
-          box.append(el("div", "t", "Каждый факт найден в тексте"));
+          box.append(el("div", "t", "Проверены ссылки, цитаты и числовые значения"));
           if (c.sources_total) box.append(row("Ссылки найдены", `${c.sources_ok} из ${c.sources_total}`));
           if (c.numbers_checked) box.append(row("Числа и даты сверены", String(c.numbers_checked)));
           if (c.repaired) box.append(el("div", "q", "ответ был исправлен после проверки"));
+          box.append(el("div", "q", "Числа могут быть условиями вашего вопроса или результатом расчёта. Проверка не доказывает правильность юридического вывода."));
         } else {
           box.append(el("div", "t", "Не подтверждено документами"));
           const ul = el("ul"); c.hard_issues.forEach((t) => ul.append(el("li", "", t))); box.append(ul);
