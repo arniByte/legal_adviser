@@ -1,0 +1,76 @@
+{
+  "allowed_requirements_sha256": "54e0542fa9f9917d39c51ecf80ea3077b2135eb924ac7328dfad6aa5e3780b12",
+  "archive": {
+    "name": "baseline-1b8b4bb.zip",
+    "sha256": "e0fad40432169b1c4c26076f3b754e0786c840ea4facdfd30bb2f38f7ae8c44b",
+    "size_bytes": 57728
+  },
+  "files": {
+    "la_config.py": {
+      "sha256": "66cc75e0de90abc0e44320027cec8de61d4c6cf2b50fcbe076833c1183eb7965",
+      "size_bytes": 3329
+    },
+    "la_edit.py": {
+      "sha256": "90fa7ebb5cd81da93ea9ce5b9e199f00c362c6317edff882fd4bb3df8e77fd7c",
+      "size_bytes": 6653
+    },
+    "la_kb.py": {
+      "sha256": "9c73d1c96846613901bbbe793b2e94ee195bc8bb11bd9e53817f29501c38d8e9",
+      "size_bytes": 35480
+    },
+    "la_llm.py": {
+      "sha256": "1119ad8ecc4ede55c82161817abcbcbbf8d03defd63666f136ba8f7494a845d5",
+      "size_bytes": 9262
+    },
+    "la_pipeline.py": {
+      "sha256": "b48ea904b50893128702b89d47e7d28b8c6c091039a00048f86c66b8b68fbb38",
+      "size_bytes": 21630
+    },
+    "la_prompts.py": {
+      "sha256": "f37e232321e6ef15a0772d35740a3c6371daa6fb0e8bd0e5731bf757de7f40c7",
+      "size_bytes": 43902
+    },
+    "la_retrieval.py": {
+      "sha256": "a8f552fec8773f01d589ded4b51556adeb340cb1e10d0f86c7571fc2d10482c8",
+      "size_bytes": 15467
+    },
+    "la_text.py": {
+      "sha256": "3ee558cd2b63344fe5778d266b095fa872828f85ce1378140bd15d40fa3c8396",
+      "size_bytes": 18862
+    },
+    "la_verify.py": {
+      "sha256": "f1e9dad3312cb7e2d072c1e0c90dd232a9791355c9b72ad73234158299a31174",
+      "size_bytes": 8770
+    },
+    "requirements.txt": {
+      "sha256": "b455f0b237d5dba80114ce15870ab6e416ee1111d3ed066d296200e8f27ef062",
+      "size_bytes": 27
+    },
+    "solution.py": {
+      "sha256": "52eef422e6a9806bc73e097feea1d08c5011a52ae24a56656f27abba32a6551d",
+      "size_bytes": 13590
+    }
+  },
+  "local_smoke_inputs": {
+    "knowledge_base": {
+      "path": "data/knowledge-base.zip",
+      "sha256": "cea8ef2c8f6c8b9f498efacf705b97bf3da53cc78f366f9b1fef7a6de66327e0"
+    },
+    "note": "--smoke uses the current public demo KB/questions, including with --ref; no real API quality score.",
+    "questions": {
+      "path": "data/demo_questions.csv",
+      "sha256": "e922cee1e155ed23f9f1c8f9758e396ed0e72e4309343dffe33824139bbf1423"
+    },
+    "source": "current_working_tree"
+  },
+  "python": {
+    "implementation": "cpython",
+    "version": "3.12.14"
+  },
+  "schema_version": 1,
+  "source": {
+    "git_sha": "1b8b4bb1fea97497a1066fe62c5d97adee37901f",
+    "kind": "git_ref",
+    "requested_ref": "1b8b4bb1fea97497a1066fe62c5d97adee37901f"
+  }
+}
