@@ -3,6 +3,7 @@
     python eval/run_eval.py --label v7                  # our answers + judge + report
     python eval/run_eval.py --no-judge                  # quick checks only (no judge calls)
     python eval/run_eval.py --answers v7 --repeats 3    # judge the saved answers of run "v7" again, three times
+    python eval/run_eval.py --compare v7 v8            # paired comparison of saved runs, no API required
     python eval/run_eval.py --limit 10 --only temporal,twins
 
 Needs the same environment as the solution (LLM_BASE_URL, LLM_API_KEY, LLM_MODEL ...).
@@ -15,9 +16,8 @@ What is reproduced from the technical regulation:
   * an invented fact zeroes the question;
   * MatchRate = mean score, WinRate = W / (W + L), Score = 0.7 * MatchRate + 0.3 * WinRate.
 The organisers' judge prompt, baseline and questions are not public, so absolute numbers differ from
-the leaderboard. Two baselines bracket the unknown one: the organisers' starter submission (weak) and
-the reference answer itself (the strongest possible). A change is an improvement only if it helps
-against the first and does not hurt against the second.
+the leaderboard. The starter submission and the reference answer are two proxy baselines, not proven
+bounds on the unknown baseline. Their scores are local diagnostics, not calibrated leaderboard estimates.
 
 Both the model and the judge vary between runs, so one run proves little: compare versions on several
 judge repeats (--repeats) and, for the final decision, on more than one generation run.
@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import os
 import re
@@ -35,6 +36,7 @@ import sys
 import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -67,6 +69,44 @@ def norm(text: str) -> str:
 
 
 _REF = re.compile(r"(?:п\.|пп\.|ч\.|ст\.|подп\.)\s*(\d+(?:\.\d+)*)")
+
+
+def _json_hash(value) -> str:
+    return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
+
+
+def build_metadata(settings, rows: list, devset: Path, *, workers: int, repeats: int,
+                   baseline: str, answer_source: str = "") -> dict:
+    """An explicit allowlist keeps API addresses, keys and local paths out of provenance."""
+    git = {"sha": None, "dirty": None}
+    try:
+        git["sha"] = subprocess.check_output(
+            ["git", "-C", str(ROOT), "rev-parse", "HEAD"], text=True, stderr=subprocess.DEVNULL).strip()
+        git["dirty"] = bool(subprocess.check_output(
+            ["git", "-C", str(ROOT), "status", "--porcelain"], text=True, stderr=subprocess.DEVNULL).strip())
+    except (OSError, subprocess.CalledProcessError):
+        pass
+    safe_fields = ("llm_model", "emb_model", "reranker_model", "temperature", "max_tokens", "max_workers",
+                   "time_budget", "request_timeout", "use_embeddings", "use_reranker", "second_pass",
+                   "repair", "edit")
+    return {
+        "schema_version": 1,
+        "created_at_utc": datetime.now(timezone.utc).isoformat(),
+        "git": git,
+        "inputs": {
+            "kb_sha256": hashlib.sha256((ROOT / "data" / "knowledge-base.zip").read_bytes()).hexdigest(),
+            "devset_sha256": hashlib.sha256(devset.read_bytes()).hexdigest(),
+            "selected_sha256": _json_hash(rows),
+            "question_sha256": {r["id"]: _json_hash(r) for r in rows},
+        },
+        "settings": {name: getattr(settings, name) for name in safe_fields},
+        "evaluation": {
+            "workers": workers, "repeats": repeats, "baseline": baseline,
+            "judge_model": os.getenv("JUDGE_MODEL", "").strip() or settings.llm_model,
+            "judge_max_tokens": 1200, "judge_temperature": 0.0,
+            "question_deadline_seconds": 240, "answer_source_run": answer_source or None,
+        },
+    }
 
 
 def answer_facts(text: str, question: str) -> set:
@@ -109,7 +149,8 @@ def load_devset(path: Path, only, limit) -> list:
     return rows[:limit] if limit else rows
 
 
-def run_ours(rows: list, settings, workers: int) -> dict:
+def run_ours(rows: list, settings, workers: int, metadata: dict | None = None) -> dict:
+    started = time.monotonic()
     kb = load_kb(ROOT / "data" / "knowledge-base.zip")
     llm = LLMClient(settings)
     retriever = Retriever(kb, llm, settings)
@@ -130,6 +171,13 @@ def run_ours(rows: list, settings, workers: int) -> dict:
     print(f"ours: {len(out)} answers; dense search {'on' if dense else 'off'}; reranker "
           f"{llm.reranker_model if llm.reranker_ok else 'off'}; llm calls {llm.stats['chat_calls']}; tokens in/out "
           f"{llm.stats['prompt_tokens']}/{llm.stats['completion_tokens']}", flush=True)
+    if metadata is not None:
+        metadata["generation"] = {
+            "elapsed_seconds": round(time.monotonic() - started, 3),
+            "dense_search": bool(dense),
+            "reranker_model": llm.reranker_model if llm.reranker_ok else None,
+            "llm_stats": {k: v for k, v in llm.stats.items() if isinstance(v, (int, float))},
+        }
     return {rows[i]["id"]: out[i] for i in range(len(rows))}
 
 
@@ -227,30 +275,148 @@ def pooled(repeats: list, rid: str) -> dict:
             "reasons": vs[0]["reasons"]}
 
 
+def successful_ids(repeat: dict, ids) -> set:
+    return {rid for rid in ids if isinstance(repeat.get(rid, {}).get("score"), (int, float))
+            and 0.0 <= repeat[rid]["score"] <= 1.0}
+
+
+def common_successful_ids(repeats: list, ids) -> set:
+    return set.intersection(*(successful_ids(rep, ids) for rep in repeats)) if repeats else set()
+
+
+def _ids_text(ids) -> str:
+    return ", ".join(f"`{rid}`" for rid in sorted(ids)) or "нет"
+
+
 def judge_table(rows: list, verdicts: dict) -> list:
-    """One line per judge repeat and a mean per baseline."""
-    lines = ["| Baseline | Прогон судьи | Score | MatchRate | WinRate | П / Н / Пр | Обнулено | Score без обнуления |",
-             "|---|---|---|---|---|---|---|---|"]
+    """Individual coverage is visible; repeats are averaged only on the same question IDs."""
+    ids = {r["id"] for r in rows}
+    lines = ["| Baseline | Прогон судьи | Оценено / всего | Score | MatchRate | WinRate | П / Н / Пр | Обнулено | Score без обнуления | Исключённые ID |",
+             "|---|---|---|---|---|---|---|---|---|---|"]
     for name, repeats in verdicts.items():
-        scores, zeroed, clean = [], [], []
         for k, rep in enumerate(repeats, 1):
-            ok = [rep[r["id"]] for r in rows if "score" in rep[r["id"]]]
+            good = successful_ids(rep, ids)
+            ok = [rep[rid] for rid in sorted(good)]
             m, raw = metrics([v["score"] for v in ok]), metrics([v["raw"] for v in ok])
             z = sum(1 for v in ok if v["fabricated"])
-            scores.append(m["score"])
-            zeroed.append(z)
-            clean.append(raw["score"])
-            lines.append(f"| {name} | {k} | {m['score']:.3f} | {m['match_rate']:.3f} | {m['win_rate']:.3f} | "
-                         f"{m['wins']} / {m['ties']} / {m['losses']} | {z} | {raw['score']:.3f} |")
+            values = (f"{m['score']:.3f} | {m['match_rate']:.3f} | {m['win_rate']:.3f} | "
+                      f"{m['wins']} / {m['ties']} / {m['losses']} | {z} | {raw['score']:.3f}") if ok \
+                else "— | — | — | — | — | —"
+            lines.append(f"| {name} | {k} | {len(good)} / {len(ids)} | {values} | {_ids_text(ids - good)} |")
         if len(repeats) > 1:
-            lines.append(f"| **{name}** | **среднее** | **{sum(scores) / len(scores):.3f}** | | | | "
-                         f"**{sum(zeroed) / len(zeroed):.1f}** | **{sum(clean) / len(clean):.3f}** |")
+            common = common_successful_ids(repeats, ids)
+            if common:
+                scores = [metrics([rep[rid]["score"] for rid in sorted(common)])["score"] for rep in repeats]
+                clean = [metrics([rep[rid]["raw"] for rid in sorted(common)])["score"] for rep in repeats]
+                zeroed = [sum(bool(rep[rid]["fabricated"]) for rid in common) for rep in repeats]
+                values = (f"**{sum(scores) / len(scores):.3f}** | | | | "
+                          f"**{sum(zeroed) / len(zeroed):.1f}** | **{sum(clean) / len(clean):.3f}**")
+            else:
+                values = "— | | | | — | —"
+            lines.append(f"| **{name}** | **среднее, общие ID** | **{len(common)} / {len(ids)}** | "
+                         f"{values} | {_ids_text(ids - common)} |")
     return lines
 
 
-def report(rows: list, ours: dict, bases: dict, verdicts: dict, out_dir: Path, label: str) -> None:
+def compare_artifacts(left: dict, right: dict) -> dict:
+    """Pair corresponding judge repeats on identical, successful questions; keep the score formula."""
+    left_ids, right_ids = set(left.get("ours", {})), set(right.get("ours", {}))
+    candidate_ids = left_ids & right_ids
+    left_meta, right_meta = left.get("metadata", {}), right.get("metadata", {})
+    left_inputs, right_inputs = left_meta.get("inputs", {}), right_meta.get("inputs", {})
+    left_hashes, right_hashes = left_inputs.get("question_sha256", {}), right_inputs.get("question_sha256", {})
+    changed = {rid for rid in candidate_ids if rid in left_hashes and rid in right_hashes
+               and left_hashes[rid] != right_hashes[rid]}
+    warnings = []
+    if any(rid not in left_hashes or rid not in right_hashes for rid in candidate_ids):
+        warnings.append("Для части ID нет хеша вопроса и эталона: идентичность старых артефактов не подтверждена.")
+    if not left_inputs.get("kb_sha256") or not right_inputs.get("kb_sha256") \
+            or left_inputs["kb_sha256"] != right_inputs["kb_sha256"]:
+        warnings.append("Хеши базы знаний различаются или отсутствуют: изменение базы смешано с изменением решения.")
+    if not left_meta or not right_meta:
+        warnings.append("Есть артефакты без metadata; версия кода и параметры старого прогона неизвестны.")
+    baselines = {}
+    left_judge, right_judge = left.get("judge", {}), right.get("judge", {})
+    for name in sorted(set(left_judge) & set(right_judge)):
+        reps_a, reps_b = left_judge[name], right_judge[name]
+        count = min(len(reps_a), len(reps_b))
+        if not count:
+            continue
+        bas_a, bas_b = left.get("baselines", {}).get(name, {}), right.get("baselines", {}).get(name, {})
+        changed_baseline = {rid for rid in candidate_ids if rid in bas_a and rid in bas_b
+                            and bas_a[rid] != bas_b[rid]}
+        common = common_successful_ids(reps_a[:count] + reps_b[:count], candidate_ids - changed - changed_baseline)
+        paired = []
+        for i in range(count):
+            ma = metrics([reps_a[i][rid]["score"] for rid in sorted(common)])
+            mb = metrics([reps_b[i][rid]["score"] for rid in sorted(common)])
+            paired.append({"repeat": i + 1, "left": ma, "right": mb,
+                           "delta": round(mb["score"] - ma["score"], 4) if common else None,
+                           "left_evaluated": len(successful_ids(reps_a[i], left_ids)),
+                           "right_evaluated": len(successful_ids(reps_b[i], right_ids))})
+        per_id = {}
+        for rid in sorted(common):
+            a = sum(rep[rid]["score"] for rep in reps_a[:count]) / count
+            b = sum(rep[rid]["score"] for rep in reps_b[:count]) / count
+            per_id[rid] = {"left": a, "right": b, "delta": b - a}
+        baselines[name] = {
+            "paired_repeats": count, "unpaired_left_repeats": len(reps_a) - count,
+            "unpaired_right_repeats": len(reps_b) - count,
+            "common_ids": sorted(common), "excluded_ids": sorted((left_ids | right_ids) - common),
+            "changed_baseline_ids": sorted(changed_baseline), "repeats": paired, "per_id": per_id,
+            "mean_delta": round(sum(p["delta"] for p in paired) / count, 4) if common else None,
+            "improved_ids": [rid for rid, v in per_id.items() if v["delta"] > 0],
+            "worsened_ids": [rid for rid, v in per_id.items() if v["delta"] < 0],
+        }
+    return {"left_total": len(left_ids), "right_total": len(right_ids), "changed_question_ids": sorted(changed),
+            "warnings": warnings, "baselines": baselines}
+
+
+def comparison_lines(comparison: dict, left_label: str, right_label: str) -> list:
+    lines = [f"# Парное сравнение: {left_label} → {right_label}", "",
+             "Разность — второй прогон минус первый. Это описательное сравнение, без вывода о статистической значимости.",
+             "Для каждого baseline используются общие ID, успешно оценённые во всех парных повторах обоих прогонов.", ""]
+    lines += [f"- {warning}" for warning in comparison["warnings"]]
+    if comparison["changed_question_ids"]:
+        lines.append("- Изменены вопрос или эталон, исключены ID: " + _ids_text(comparison["changed_question_ids"]))
+    if not comparison["baselines"]:
+        return lines + ["", "Нет общих прогонов судьи для сравнения."]
+    for name, data in comparison["baselines"].items():
+        lines += ["", f"## {name}", "",
+                  f"Общие оценённые вопросы: {len(data['common_ids'])}; всего ответов — "
+                  f"{left_label}: {comparison['left_total']}, {right_label}: {comparison['right_total']}.",
+                  "Исключённые ID: " + _ids_text(data["excluded_ids"]),
+                  "Изменился ответ baseline, исключены ID: " + _ids_text(data["changed_baseline_ids"]),
+                  f"Повторов без пары: {data['unpaired_left_repeats']} / {data['unpaired_right_repeats']}.", "",
+                  "| Повтор | Оценено A / всего | Оценено B / всего | Общих ID | Score A | Score B | Δ |",
+                  "|---|---|---|---|---|---|---|"]
+        for pair in data["repeats"]:
+            values = (f"{pair['left']['score']:.4f} | {pair['right']['score']:.4f} | {pair['delta']:+.4f}") \
+                if pair["delta"] is not None else "— | — | —"
+            lines.append(f"| {pair['repeat']} | {pair['left_evaluated']} / {comparison['left_total']} | "
+                         f"{pair['right_evaluated']} / {comparison['right_total']} | {len(data['common_ids'])} | {values} |")
+        if data["mean_delta"] is not None:
+            lines += ["", f"Средняя парная разность Score: {data['mean_delta']:+.4f}."]
+        lines += ["", "Улучшились ID: " + _ids_text(data["improved_ids"]),
+                  "Ухудшились ID: " + _ids_text(data["worsened_ids"]), "",
+                  "| ID | Средний балл вопроса A | Средний балл вопроса B | Δ |", "|---|---|---|---|"]
+        for rid, values in data["per_id"].items():
+            if values["delta"]:
+                lines.append(f"| {rid} | {values['left']:.3f} | {values['right']:.3f} | {values['delta']:+.3f} |")
+    return lines
+
+
+def report(rows: list, ours: dict, bases: dict, verdicts: dict, out_dir: Path, label: str,
+           metadata: dict | None = None) -> None:
     """bases: {baseline name: {id: answer}}; verdicts: {baseline name: [one {id: verdict} per judge repeat]}."""
     lines = [f"# Локальная оценка: {label}", ""]
+    if metadata:
+        lines += ["## Воспроизводимость", "",
+                  f"- git: `{metadata['git']['sha']}`; незакоммиченные изменения: {metadata['git']['dirty']}",
+                  f"- SHA256 базы: `{metadata['inputs']['kb_sha256']}`",
+                  f"- SHA256 devset: `{metadata['inputs']['devset_sha256']}`",
+                  f"- SHA256 выбранных вопросов: `{metadata['inputs']['selected_sha256']}`",
+                  "- параметры и наблюдения выполнения: `metadata.json` (без API-адресов и ключей)", ""]
     checks = {r["id"]: quick_checks(r, ours[r["id"]]["answer"]) for r in rows}
     fs = fact_scores(rows, ours)
     n = len(rows)
@@ -269,34 +435,45 @@ def report(rows: list, ours: dict, bases: dict, verdicts: dict, out_dir: Path, l
               f"медиана: {sorted(ours[r['id']]['seconds'] for r in rows)[n // 2]:.1f}", ""]
     main_name = next(iter(verdicts), "")
     main_runs = verdicts.get(main_name, [])
+    common_main = common_successful_ids(main_runs, {r["id"] for r in rows})
     if verdicts:
         lines += ["## Судья", ""] + judge_table(rows, verdicts) + [
-            "", "«Обнулено» — ответы, в которых судья увидел выдуманный факт: такой вопрос получает 0. Судья не видит "
-                "базу знаний, поэтому выдумкой считает и верное положение, которого нет в эталоне.", "",
-            f"Разбивка ниже — против baseline «{main_name}», по всем прогонам судьи.", "",
-            "| Набор | n | MatchRate | WinRate | Score | П / Н / Пр |", "|---|---|---|---|---|---|"]
+            "", "«Обнулено» — ответы, в которых локальный судья отметил выдуманный факт: такой вопрос получает 0. "
+                "Судья видит эталон, но не базу знаний; это эвристическая оценка, которая может ошибаться, "
+                "в том числе на верных дополнениях к эталону.", "",
+            f"Разбивка ниже — против baseline «{main_name}»: только общие ID, оценённые во всех повторах "
+            f"({len(common_main)} / {n} вопросов). Оценок на вопрос: {len(main_runs)}.",
+            "Исключённые ID: " + _ids_text({r["id"] for r in rows} - common_main), "",
+            "| Набор | Оценок / всего | MatchRate | WinRate | Score | П / Н / Пр |", "|---|---|---|---|---|---|"]
 
         def group(select) -> dict:
             return metrics([rep[r["id"]]["score"] for rep in main_runs for r in rows
-                            if select(r) and "score" in rep[r["id"]]])
+                            if select(r) and r["id"] in common_main])
 
         for src, title in (("organisers", "эталоны организаторов"), ("team", "эталоны команды")):
             m = group(lambda r: r.get("source") == src)
-            if m["n"]:
-                lines.append(f"| {title} | {m['n']} | {m['match_rate']:.2f} | {m['win_rate']:.2f} | {m['score']:.2f} | "
+            expected = sum(r.get("source") == src for r in rows) * len(main_runs)
+            if expected:
+                lines.append(f"| {title} | {m['n']} / {expected} | {m['match_rate']:.2f} | {m['win_rate']:.2f} | {m['score']:.2f} | "
                              f"{m['wins']} / {m['ties']} / {m['losses']} |")
-        lines += ["", "| Категория | n | MatchRate | WinRate | Score | П / Н / Пр |", "|---|---|---|---|---|---|"]
+        lines += ["", "| Категория | Оценок / всего | MatchRate | WinRate | Score | П / Н / Пр |", "|---|---|---|---|---|---|"]
         for cat in sorted({r["category"] for r in rows}):
             m = group(lambda r: r["category"] == cat)
-            lines.append(f"| {cat} | {m['n']} | {m['match_rate']:.2f} | {m['win_rate']:.2f} | {m['score']:.2f} | "
+            expected = sum(r["category"] == cat for r in rows) * len(main_runs)
+            lines.append(f"| {cat} | {m['n']} / {expected} | {m['match_rate']:.2f} | {m['win_rate']:.2f} | {m['score']:.2f} | "
                          f"{m['wins']} / {m['ties']} / {m['losses']} |")
         lines.append("")
+    else:
+        lines += ["## Судья", "", f"Оценено 0 / {n}: судья не запускался.",
+                  "Не оценены ID: " + _ids_text(r["id"] for r in rows), ""]
     lines += ["## Что смотреть в первую очередь", ""]
     for r in rows:
         j = pooled(main_runs, r["id"])
         c = checks[r["id"]]
+        judge_errors = [rep.get(r["id"], {}).get("error", "нет оценки") for rep in main_runs
+                        if r["id"] not in successful_ids(rep, [r["id"]])]
         flagged = (j.get("score", 1.0) < 0.5) or c["missing"] or c["violated"] or ours[r["id"]]["hard_issues"] \
-            or ours[r["id"]]["error"]
+            or ours[r["id"]]["error"] or judge_errors
         if not flagged:
             continue
         lines += [f"### {r['id']} · {r['category']}" + (f" · балл {j['score']:.2f}" if "score" in j else ""), "",
@@ -305,6 +482,8 @@ def report(rows: list, ours: dict, bases: dict, verdicts: dict, out_dir: Path, l
         if main_name and main_name != "golden":
             lines += [f"**Baseline:** {bases[main_name][r['id']]}", ""]
         notes = []
+        if judge_errors:
+            notes.append("не оценено судьёй: " + "; ".join(judge_errors))
         if c["missing"]:
             notes.append("нет: " + ", ".join(c["missing"]))
         if c["violated"]:
@@ -321,8 +500,10 @@ def report(rows: list, ours: dict, bases: dict, verdicts: dict, out_dir: Path, l
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "report.md").write_text("\n".join(lines), encoding="utf-8")
     (out_dir / "answers.json").write_text(json.dumps(
-        {"ours": ours, "baselines": {k: v for k, v in bases.items() if k != "golden"}, "judge": verdicts},
+        {"ours": ours, "baselines": {k: v for k, v in bases.items() if k != "golden"}, "judge": verdicts,
+         "metadata": metadata or {}},
         ensure_ascii=False, indent=1), encoding="utf-8")
+    (out_dir / "metadata.json").write_text(json.dumps(metadata or {}, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"report: {out_dir / 'report.md'}")
     print("\n".join(lines[2:14]))
     if verdicts:
@@ -342,19 +523,58 @@ def main() -> None:
     ap.add_argument("--answers", default="", help="label of an earlier run: judge its saved answers, do not generate")
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--label", default="")
+    ap.add_argument("--overwrite", action="store_true", help="explicitly allow replacing an existing run directory")
+    ap.add_argument("--compare", nargs=2, metavar=("LEFT", "RIGHT"),
+                    help="compare saved runs on common successfully judged IDs; does not call an API")
     args = ap.parse_args()
 
+    runs = Path(__file__).resolve().parent / "runs"
+    labels = [("--label", args.label), ("--answers", args.answers)]
+    labels += [("--compare", label) for label in (args.compare or [])]
+    for flag, label in labels:
+        if (flag == "--compare" and not label) or \
+                (label and (Path(label).name != label or label in (".", "..") or "\\" in label)):
+            ap.error(f"{flag} принимает метку прогона, а не путь")
+    if args.compare:
+        left, right = [json.loads((runs / label / "answers.json").read_text(encoding="utf-8"))
+                       for label in args.compare]
+        comparison = compare_artifacts(left, right)
+        text = "\n".join(comparison_lines(comparison, *args.compare)) + "\n"
+        path = runs / f"compare_{args.compare[0]}_vs_{args.compare[1]}.md"
+        path.write_text(text, encoding="utf-8")
+        print(text)
+        print(f"report: {path}")
+        return
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
+    label = args.label or (f"{args.answers}-rejudge-{timestamp}" if args.answers else timestamp)
+    out_dir = runs / label
+    if out_dir.exists() and not args.overwrite:
+        ap.error(f"прогон {label!r} уже существует; выберите другую --label или явно передайте --overwrite")
+    if out_dir.is_symlink() or (out_dir.exists() and not out_dir.is_dir()):
+        ap.error("каталог прогона не должен быть файлом или символической ссылкой")
     settings = load_settings()
     if not settings.has_api:
         sys.exit("Задайте LLM_BASE_URL и LLM_API_KEY (см. .env.example).")
     rows = load_devset(Path(args.devset), {x for x in args.only.split(",") if x}, args.limit)
-    runs = Path(__file__).resolve().parent / "runs"
-    label = args.label or args.answers or time.strftime("%Y%m%d-%H%M%S")
+    saved = None
     if args.answers:
-        ours = json.loads((runs / args.answers / "answers.json").read_text(encoding="utf-8"))["ours"]
+        saved = json.loads((runs / args.answers / "answers.json").read_text(encoding="utf-8"))
+        ours = saved["ours"]
         rows = [r for r in rows if r["id"] in ours]
+    if not rows:
+        ap.error("нет вопросов для оценки")
+    metadata = build_metadata(settings, rows, Path(args.devset), workers=args.workers,
+                              repeats=args.repeats, baseline=args.baseline, answer_source=args.answers)
+    try:
+        out_dir.mkdir(parents=True, exist_ok=args.overwrite)
+    except FileExistsError:
+        ap.error(f"прогон {label!r} уже существует; выберите другую --label или явно передайте --overwrite")
+    if saved is not None:
+        original = saved.get("metadata", {})
+        metadata["original_answer_metadata"] = original.get("original_answer_metadata", original)
     else:
-        ours = run_ours(rows, settings, args.workers)
+        ours = run_ours(rows, settings, args.workers, metadata)
 
     bases, verdicts = {}, {}
     if not args.no_judge:
@@ -367,7 +587,7 @@ def main() -> None:
         for name, base in bases.items():
             verdicts[name] = [judge_all(rows, ours, base, judge, args.workers) for _ in range(args.repeats)]
         print(f"judge ({judge.s.llm_model}): {judge.stats['chat_calls']} calls", flush=True)
-    report(rows, ours, bases, verdicts, runs / label, label)
+    report(rows, ours, bases, verdicts, out_dir, label, metadata)
 
 
 if __name__ == "__main__":

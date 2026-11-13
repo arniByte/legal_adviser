@@ -10,6 +10,7 @@ the best fragments in document order with their structural context.
 
 from __future__ import annotations
 
+import hashlib
 import math
 import sys
 import time
@@ -120,11 +121,13 @@ class Retriever:
     # Dense vectors
     # ------------------------------------------------------------------ #
     def build_embeddings(self, deadline=None) -> bool:
-        """Embed all chunks once (cached on disk by KB fingerprint). Returns True when vectors are ready."""
+        """Cache by corpus, model and exact embedding inputs, including structural parser changes."""
         if np is None or self.llm is None or not self.s or not self.s.use_embeddings or not self.s.has_api:
             return False
         safe_model = "".join(ch if ch.isalnum() else "_" for ch in self.s.emb_model)
-        cache = self.s.cache_dir / f"emb_{self.kb.fingerprint}_{safe_model}.npy"
+        texts = [c.search_text[:6000] for c in self.kb.chunks]
+        input_hash = hashlib.sha256("\x00".join(texts).encode("utf-8")).hexdigest()[:16]
+        cache = self.s.cache_dir / f"emb_{self.kb.fingerprint}_{safe_model}_{input_hash}.npy"
         try:
             if cache.is_file():
                 m = np.load(cache)
@@ -133,7 +136,6 @@ class Retriever:
                     return True
         except Exception:
             pass
-        texts = [c.search_text[:6000] for c in self.kb.chunks]
         batches = [texts[i:i + 32] for i in range(0, len(texts), 32)]
         t0 = time.monotonic()
         try:

@@ -14,6 +14,7 @@ from __future__ import annotations
 import re
 import time
 from dataclasses import dataclass, field
+from datetime import date, timedelta
 
 from la_edit import EDITABLE_STATUSES, edit_answer
 from la_kb import company_status, normalize_docnum, twins_of
@@ -25,6 +26,8 @@ from la_verify import issues_text, verify
 FALLBACK_ANSWER = ("Не удалось сформировать подтверждённый документами ответ из-за технической ошибки. "
                    "Без подтверждения положениями базы знаний юридически значимых выводов ассистент не делает; "
                    "повторите запрос позже.")
+UNVERIFIED_ANSWER = ("Не удалось подтвердить сформированный ответ документами базы знаний, поэтому юридический "
+                     "вывод не предоставлен. Уточните вопрос или повторите запрос.")
 
 # --------------------------------------------------------------------------- #
 # Dialogue
@@ -179,12 +182,14 @@ def entity_hints(kb, dialog: Dialog) -> list:
 
 
 def _period_bounds(p: tuple) -> tuple:
+    """Calendar interval [start, end): a day, a month or a whole year."""
     y, mo, d = p
     if d:
-        return (y, mo, d), (y, mo, d)
+        start = date(y, mo, d)
+        return start, start + timedelta(days=1)
     if mo:
-        return (y, mo, 1), (y, mo, 31)
-    return (y, 1, 1), (y, 12, 31)
+        return date(y, mo, 1), date(y + mo // 12, mo % 12 + 1, 1)
+    return date(y, 1, 1), date(y + 1, 1, 1)
 
 
 def date_hints(kb, dialog: Dialog) -> list:
@@ -200,19 +205,19 @@ def date_hints(kb, dialog: Dialog) -> list:
                          "утратившие силу редакции используй только для сравнения, если это уместно.")
         return hints
     for p in periods[:3]:
-        lo, hi = _period_bounds(p)
         label = fmt_date(*p)
+        try:
+            lo, hi = _period_bounds(p)
+        except ValueError:
+            hints.append(f"Дата {label} некорректна: попроси уточнить дату события; "
+                         "не делай вывода о действии редакции на эту дату.")
+            continue
         for d in editions:
             vf, vt = d.meta.get("valid_from"), d.meta.get("valid_to")
-            starts_before_end = vf is None or vf <= hi
-            ends_after_start = vt is None or vt > lo
-            whole = (vf is None or vf <= lo) and (vt is None or vt > hi)
-            if not whole and starts_before_end and ends_after_start:
-                # an edition that covers almost the whole period (e.g. adopted on 10 January) counts as in force
-                a, b = max(lo, vf or lo), min(hi, vt or hi)
-                span = (hi[0] - lo[0]) * 372 + (hi[1] - lo[1]) * 31 + (hi[2] - lo[2]) + 1
-                part = (b[0] - a[0]) * 372 + (b[1] - a[1]) * 31 + (b[2] - a[2]) + 1
-                whole = span > 0 and part / span >= 0.9
+            start, end = date(*vf) if vf else date.min, date(*vt) if vt else date.max
+            starts_before_end = start < hi
+            ends_after_start = end > lo
+            whole = start <= lo and end >= hi
             if whole:
                 state = "ДЕЙСТВОВАЛ"
             elif starts_before_end and ends_after_start:
@@ -221,12 +226,12 @@ def date_hints(kb, dialog: Dialog) -> list:
                 state = "НЕ действовал"
             hints.append(f"На дату/период {label}: {_doc_ref(kb, d.doc_id)} {state} ({company_status(d)}).")
         later = [d for d in kb.company_docs if d.meta.get("date") and not d.meta.get("valid_from")
-                 and d.meta["date"] > hi]
+                 and date(*d.meta["date"]) >= hi]
         for d in later:
             hints.append(f"Документ {_doc_ref(kb, d.doc_id)} датирован {fmt_date(*d.meta['date'])} — позже {label}; "
                          f"к событиям до его даты он не применяется.")
         exports = [d.meta.get("export_date") for d in kb.law_docs if d.meta.get("export_date")]
-        if exports and hi < max(exports):
+        if exports and hi <= date(*max(exports)):
             hints.append(f"Законы в базе даны только в действующей редакции (выгрузка {fmt_date(*max(exports))}). "
                          f"Если нужное положение закона изменено позже {label} (см. примечания «изменен с …»), "
                          f"редакции на {label} в базе нет — сообщи об этом и не делай вывода о прежней норме.")
@@ -340,7 +345,7 @@ class Assistant:
         stage("verification")
         t = time.monotonic()
         hint_text = "\n".join(hints)
-        report = verify(parsed, self.kb, ctx.doc_ids, dialog.full_text, hint_text)
+        report = verify(parsed, self.kb, ctx.doc_ids, dialog.full_text, hint_text, require_sources=True)
         if report["hard"] and full and self.s.repair and self._time_left(deadline) > 20:
             stage("repair", issues=report["hard"])
             try:
@@ -348,7 +353,7 @@ class Assistant:
                                                  {"role": "user", "content": REPAIR_TEMPLATE.format(
                                                      issues=issues_text(report))}], deadline=deadline)
                 parsed3 = parse_output(raw3)
-                report3 = verify(parsed3, self.kb, ctx.doc_ids, dialog.full_text, hint_text)
+                report3 = verify(parsed3, self.kb, ctx.doc_ids, dialog.full_text, hint_text, require_sources=True)
                 if parsed3["answer"] and report3["hard"] < report["hard"]:
                     parsed, report = parsed3, report3
                     result.repaired = True
@@ -357,28 +362,43 @@ class Assistant:
         timings["verification"] = round(time.monotonic() - t, 3)
 
         answer = parsed["answer"] or FALLBACK_ANSWER
-        answer = self._ensure_reference(answer, parsed["status"], report)
-        extra = parsed.get("extra", "")
-        if extra and verify({"answer": extra, "sources": []}, self.kb, ctx.doc_ids, dialog.full_text, hint_text)["hard"]:
-            extra = ""                                 # side notes are shown only when every fact in them checks out
-        answer, overflow = trim_answer(answer)
-        if overflow:                                   # nothing is lost: the tail moves to the side notes
-            result.trimmed = True
-            extra = (overflow + " " + extra).strip()
-        if full and self.s.edit and parsed["status"] in EDITABLE_STATUSES and self._time_left(deadline) > 20:
-            stage("edit")
-            t = time.monotonic()
-            answer, removed = edit_answer(self.llm, raw_question, answer, deadline=deadline)
-            if removed:
-                result.edited = True
-                extra = (removed + " " + extra).strip()
-            timings["edit"] = round(time.monotonic() - t, 3)
+        extra = ""
+        if not report["hard"]:
+            answer = self._ensure_reference(answer, parsed["status"], report)
+            extra = parsed.get("extra", "")
+            if extra and verify({"answer": extra, "sources": []}, self.kb, ctx.doc_ids, dialog.full_text, hint_text)["hard"]:
+                extra = ""                             # side notes never bypass the main verification
+            answer, overflow = trim_answer(answer)
+            if overflow:
+                result.trimmed = True
+                extra = (overflow + " " + extra).strip()
+            if full and self.s.edit and parsed["status"] in EDITABLE_STATUSES and self._time_left(deadline) > 20:
+                stage("edit")
+                t = time.monotonic()
+                answer, removed = edit_answer(self.llm, raw_question, answer, deadline=deadline)
+                if removed:
+                    result.edited = True
+                    extra = (removed + " " + extra).strip()
+                timings["edit"] = round(time.monotonic() - t, 3)
+            answer = answer[:9500]
+            # Verify the text that is actually published after adding references, trimming and editing.
+            # This is local work, including in lite mode or after the API deadline has expired.
+            if answer != parsed["answer"]:
+                report = verify(dict(parsed, answer=answer), self.kb, ctx.doc_ids, dialog.full_text, hint_text,
+                                require_sources=True)
+
+        blocked = bool(report["hard"]) or parsed["status"] == "ERROR"
+        if blocked:
+            # A failed repair is not evidence that the KB lacks the answer. Do not retain unchecked
+            # assertions in the answer, side notes, explanation or apparently supporting citations.
+            answer, extra = UNVERIFIED_ANSWER, ""
+            result.error = result.error or "answer blocked by verification"
         result.extra = extra[:2000]
-        result.answer = answer[:9500]
-        result.status = parsed["status"]
-        result.sources = report["sources"]
+        result.answer = answer
+        result.status = "ERROR" if blocked or not parsed["answer"] else parsed["status"]
+        result.sources = [] if blocked else report["sources"]
         result.issues = report["issues"]
-        result.analysis = parsed["analysis"]
+        result.analysis = "" if blocked else parsed["analysis"]
         result.hints = hints
         result.context_docs = list(ctx.doc_ids)
         result.full_docs = list(ctx.full_docs)

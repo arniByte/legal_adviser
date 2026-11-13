@@ -2,6 +2,7 @@
 
     python scripts/build_submission.py            # build + static checks
     python scripts/build_submission.py --smoke    # also run the archive against the local mock proxy
+    python scripts/build_submission.py --ref HEAD --output dist/baseline.zip
 
 Checks: flat archive (no folders), solution.py present, only allowed pinned requirements,
 no secrets-looking strings, size limit, and (with --smoke) a full run that must produce a
@@ -12,6 +13,8 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
+import json
 import os
 import re
 import shutil
@@ -35,36 +38,123 @@ def fail(message: str) -> None:
     sys.exit(1)
 
 
-def build() -> Path:
-    files = sorted(p for p in SRC.iterdir() if p.is_file() and (p.suffix == ".py" or p.name == "requirements.txt"))
-    names = [p.name for p in files]
+def _git(*args: str) -> bytes:
+    try:
+        result = subprocess.run(["git", "-C", str(ROOT), *args], capture_output=True)
+    except FileNotFoundError:
+        fail("для --ref нужен установленный git")
+    if result.returncode:
+        fail("git: " + result.stderr.decode("utf-8", errors="replace").strip()[:500])
+    return result.stdout
+
+
+def _sha256(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _working_state() -> dict:
+    # Porcelain includes paths/status only: never capture diffs or environment values.
+    entries = iter(_git("status", "--porcelain=v1", "-z", "--untracked-files=all").split(b"\0"))
+    changes = []
+    for entry in entries:
+        if not entry:
+            continue
+        state = {"status": entry[:2].decode("ascii"), "path": os.fsdecode(entry[3:])}
+        if "R" in state["status"] or "C" in state["status"]:
+            state["original_path"] = os.fsdecode(next(entries))
+        changes.append(state)
+    return {"dirty": bool(changes), "changes": changes}
+
+
+def _working_source() -> dict:
+    # A downloaded source ZIP may have no .git: preserve the original build() use.
+    try:
+        probe = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "--show-toplevel"], capture_output=True)
+    except FileNotFoundError:
+        probe = None
+    if probe is None or probe.returncode or Path(os.fsdecode(probe.stdout).strip()).resolve() != ROOT.resolve():
+        return {"kind": "working_tree", "git_sha": None, "dirty": None, "changes": [],
+                "git_state": "unavailable"}
+    return {"kind": "working_tree", "git_sha": _git("rev-parse", "HEAD").decode().strip(), **_working_state()}
+
+
+def _input_hash(path: Path) -> dict:
+    return {"path": str(path.relative_to(ROOT)),
+            "sha256": _sha256(path.read_bytes()) if path.is_file() else None}
+
+
+def build(ref: str | None = None, output: str | Path | None = None) -> Path:
+    if ref is not None:
+        sha = _git("rev-parse", "--verify", "--end-of-options", ref + "^{commit}").decode().strip()
+        files = {}
+        for entry in _git("ls-tree", "-z", sha + ":submission").split(b"\0"):
+            if not entry:
+                continue
+            meta, raw_name = entry.split(b"\t", 1)
+            mode, kind, _ = meta.split()
+            name = raw_name.decode("utf-8")
+            if Path(name).suffix != ".py" and name != "requirements.txt":
+                continue
+            if kind != b"blob" or mode not in (b"100644", b"100755"):
+                fail(f"submission/{name} в ref должен быть обычным файлом")
+            files[name] = _git("show", f"{sha}:submission/{name}")
+        allowed_bytes = _git("show", sha + ":data/allowed_requirements.txt")
+        source = {"kind": "git_ref", "requested_ref": ref, "git_sha": sha}
+    else:
+        files = {p.name: p.read_bytes() for p in sorted(SRC.iterdir())
+                 if p.is_file() and (p.suffix == ".py" or p.name == "requirements.txt")}
+        allowed_bytes = ALLOWED.read_bytes()
+        source = _working_source()
+        sha = source["git_sha"]
+    names = sorted(files)
     if "solution.py" not in names:
         fail("нет solution.py")
     if "requirements.txt" not in names:
         fail("нет requirements.txt")
-    allowed = {ln.strip() for ln in ALLOWED.read_text(encoding="utf-8").splitlines() if ln.strip()}
-    for line in (SRC / "requirements.txt").read_text(encoding="utf-8").splitlines():
+    allowed = {ln.strip() for ln in allowed_bytes.decode("utf-8").splitlines() if ln.strip()}
+    for line in files["requirements.txt"].decode("utf-8").splitlines():
         if line.strip() and line.strip() not in allowed:
             fail(f"зависимость {line.strip()!r} не из разрешённого списка data/allowed_requirements.txt")
-    for p in files:
-        text = p.read_text(encoding="utf-8")
+    for name, content in files.items():
+        text = content.decode("utf-8")
         if SECRET_RE.search(text):
-            fail(f"в {p.name} найдено что-то похожее на ключ")
+            fail(f"в {name} найдено что-то похожее на ключ")
         if re.search(r"pip\s+install|subprocess.*pip", text):
-            fail(f"в {p.name} есть вызов pip install")
-    DIST.mkdir(exist_ok=True)
-    target = DIST / "submission.zip"
+            fail(f"в {name} есть вызов pip install")
+    target = Path(output) if output is not None else DIST / "submission.zip"
+    target.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as z:
-        for p in files:
-            z.write(p, p.name)                    # flat: files in the archive root
+        for name in names:
+            # Fixed order, time and permissions make repeated builds byte-identical.
+            info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
+            info.create_system = 3
+            info.external_attr = 0o100644 << 16
+            z.writestr(info, files[name], compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
     with zipfile.ZipFile(target) as z:
         if any("/" in n for n in z.namelist()):
             fail("в архиве есть вложенные папки")
     size = target.stat().st_size
     if size > MAX_BYTES:
         fail(f"архив {size} байт больше лимита 128 МБ")
-    print(f"Собран {target.relative_to(ROOT)}: {len(files)} файлов, {size / 1024:.1f} КБ")
+    manifest = {
+        "schema_version": 1,
+        "source": source,
+        "python": {"version": sys.version.split()[0], "implementation": sys.implementation.name},
+        "files": {name: {"sha256": _sha256(files[name]), "size_bytes": len(files[name])} for name in names},
+        "allowed_requirements_sha256": _sha256(allowed_bytes),
+        "archive": {"name": target.name, "sha256": _sha256(target.read_bytes()), "size_bytes": size},
+        "local_smoke_inputs": {
+            "source": "current_working_tree",
+            "knowledge_base": _input_hash(ROOT / "data" / "knowledge-base.zip"),
+            "questions": _input_hash(ROOT / "data" / "demo_questions.csv"),
+            "note": "--smoke uses the current public demo KB/questions, including with --ref; no real API quality score.",
+        },
+    }
+    manifest_path = target.with_name(target.name + ".manifest.json")
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    print(f"Собран {target}: {len(files)} файлов, {size / 1024:.1f} КБ")
     print("  " + ", ".join(names))
+    print(f"Manifest: {manifest_path}; source={sha}" + (" (dirty)" if source.get("dirty") else ""))
     return target
 
 
@@ -91,6 +181,7 @@ def validate_csv(path: Path, questions: Path) -> None:
 
 
 def smoke(archive: Path) -> None:
+    print("Smoke: текущая публичная demo-база и вопросы из working tree, в том числе для --ref; API — локальная заглушка.")
     port = 8799
     work = Path(tempfile.mkdtemp(prefix="la_smoke_"))
     (work / "data").mkdir()
@@ -121,7 +212,9 @@ def smoke(archive: Path) -> None:
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--smoke", action="store_true", help="run the archive against the local mock proxy")
+    ap.add_argument("--ref", help="build committed submission files from this git ref, without checkout")
+    ap.add_argument("--output", type=Path, help="ZIP path (default: dist/submission.zip)")
     args = ap.parse_args()
-    archive = build()
+    archive = build(ref=args.ref, output=args.output)
     if args.smoke:
         smoke(archive)

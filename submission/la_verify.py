@@ -1,8 +1,8 @@
 """Deterministic verification of a generated answer against the knowledge base.
 
-No LLM here. The checks answer one question: does the answer contain anything
-that cannot be traced to the documents shown to the model or to the user's own
-words?  Hard issues trigger a repair round in the pipeline.
+No LLM here. These are structural and numeric checks, not a proof of the
+legal inference. User-provided values remain inputs, not documentary evidence.
+Hard issues trigger a repair round and block publication if they remain.
 
 Checks:
   1. every cited source exists: document label, clause / part, and the quote;
@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import itertools
 import re
+import unicodedata
 
 from la_prompts import locator_keys
 from la_text import alnum, number_mentions, support_values
@@ -72,7 +73,90 @@ _DOCNUM_RE = re.compile(r"№\s*([0-9A-Za-zА-Яа-яЁё][0-9A-Za-zА-Яа-яЁ
 _REF_HINT_RE = re.compile(r"(\bп\.|\bпп\.|\bст\.|\bч\.|№|источник|раздел|редакци|\bстать|\bпункт|\bчаст[ьи])", re.I)
 
 
-def verify(parsed: dict, kb, context_doc_ids: list, question_text: str, extra_text: str = "") -> dict:
+_TYPOGRAPHY = str.maketrans({"ё": "е", "«": '"', "»": '"', "“": '"', "”": '"',
+                           "‘": "'", "’": "'", "—": "-", "–": "-", "−": "-"})
+_ARTICLE_RE = re.compile(r"\bст(?:атья|атьи|\.)\s*(\d+(?:\.\d+)*)", re.I)
+_QUOTE_NUMBER_RE = re.compile(r"(?<!\w)[+-]?\d+(?: \d{3})*(?:[.,:/-]\d+)*(?: ?%)?")
+
+
+def _quote_text(text: str) -> tuple:
+    """Normalise typography with offsets; never discard numbers, words, signs or punctuation."""
+    chars, offsets = [], []
+    for pos, char in enumerate(text):
+        for normalized in unicodedata.normalize("NFKC", char).lower().translate(_TYPOGRAPHY):
+            if normalized.isspace():
+                if not chars or chars[-1] == " ":
+                    continue
+                normalized = " "
+            chars.append(normalized)
+            offsets.append(pos)
+    return "".join(chars), offsets
+
+
+def exact_quote_span(text: str, quote: str, start: int = 0, end: int = None):
+    """Exact quotation in a structural range, allowing whitespace and typographic variants only."""
+    haystack, offsets = _quote_text(text[start:end])
+    needle = _quote_text(quote)[0].strip()
+    if not needle:
+        return None
+    number_spans = [m.span() for m in _QUOTE_NUMBER_RE.finditer(haystack)]
+    pos = haystack.find(needle)
+    while pos >= 0:
+        last = pos + len(needle)
+        # A quoted amount of 50 must not match the suffix of 450, nor a truncated word.
+        left_ok = not (needle[0].isalnum() and pos and haystack[pos - 1].isalnum())
+        right_ok = not (needle[-1].isalnum() and last < len(haystack) and haystack[last].isalnum())
+        complete_numbers = not any(a < boundary < b for a, b in number_spans for boundary in (pos, last))
+        if left_ok and right_ok and complete_numbers:
+            return start + offsets[pos], start + offsets[last - 1] + 1
+        pos = haystack.find(needle, pos + 1)
+    return None
+
+
+def _citation_unit(doc, locator: str):
+    """Resolve a unique unit without Doc.unit_by_keys' retrieval-oriented first-match fallback."""
+    label = locator.lower().replace("ё", "е")
+    keys = locator_keys(label)
+    if not keys:
+        return None
+    # "п. 1, п. 2" enumerates two peers; it must not become "п. 1, подп. 2".
+    if len(keys) > 1 and keys[0] != "прим" and not re.search(r"\bподп(?:\.|ункт)", label):
+        return None
+    if re.search(r"\bраздел", label):
+        return next((u for u in doc.units if u.kind == "section" and locator_keys(u.locator) == keys), None)
+    candidates = [u for u in doc.units if u.keys]
+    if re.search(r"\bподп(?:\.|ункт)", label):
+        candidates = [u for u in candidates if u.kind == "subpoint"]
+    elif re.search(r"\bч(?:\.|асть|асти)\s*\d", label):
+        candidates = [u for u in candidates if u.locator.startswith("ч.")]
+    elif re.search(r"\bп(?:\.|ункт|ункта)\s*\d", label):
+        candidates = [u for u in candidates if u.locator.startswith("п.")]
+    exact = [u for u in candidates if u.keys == keys]
+    if len(exact) == 1:
+        return exact[0]
+    if len(keys) == 1:
+        short = [u for u in candidates if u.keys[-1] == keys[0]]
+        if len(short) == 1:
+            return short[0]
+    return None
+
+
+def _unit_range(doc, unit) -> tuple:
+    """A parent provision includes its explicitly numbered children, never its next peer."""
+    end = unit.end
+    if unit.kind == "section":
+        following = next((u.start for u in doc.units[unit.idx + 1:] if u.kind == "section"), len(doc.text))
+        return unit.start, following
+    if unit.keys:
+        for child in doc.units[unit.idx + 1:]:
+            if len(child.keys) <= len(unit.keys) or child.keys[:len(unit.keys)] != unit.keys:
+                break
+            end = child.end
+    return unit.start, end
+
+
+def verify(parsed: dict, kb, context_doc_ids: list, question_text: str, extra_text: str = "", *,
+           require_sources: bool = False) -> dict:
     """Return {'sources': [...resolved...], 'issues': [...], 'hard': n, 'checked_numbers': n}."""
     answer = parsed.get("answer", "")
     issues: list = []
@@ -88,30 +172,43 @@ def verify(parsed: dict, kb, context_doc_ids: list, question_text: str, extra_te
                            "detail": f"метка документа {src['doc_id']} отсутствует в базе"})
             resolved.append(item)
             continue
-        numbered = any(u.keys for u in doc.units)
-        loose = bool(re.search(r"(абз|раздел|преамбул|шапк|реквизит|приложени)", src["locator"].lower()))
-        keys = locator_keys(src["locator"]) if (numbered and not loose) else ()
-        unit = doc.unit_by_keys(keys) if keys else None
-        span = doc.index.find(src["quote"]) if src["quote"] else None
-        if keys and unit is None:
-            # hard only when nothing ties the citation to the document: wrong label AND no matching quote
-            issues.append({"type": "bad_locator", "hard": span is None,
-                           "detail": f"в документе «{doc.title}» нет положения «{src['locator']}»"})
+        article = _ARTICLE_RE.search(src["locator"])
+        bad_article = article is not None and article.group(1) != str(doc.meta.get("article", ""))
+        keys = locator_keys(src["locator"])
+        unit = _citation_unit(doc, src["locator"]) if keys else None
+        named_range = bool(keys)
+        # An article-only citation can name this whole law; arbitrary textual locators need a quote.
+        bad_locator = bad_article or (named_range and unit is None)
+        if bad_locator:
+            issues.append({"type": "bad_locator", "hard": True,
+                           "detail": f"в документе «{doc.title}» нет однозначного положения «{src['locator']}»"})
+        scope = _unit_range(doc, unit) if unit is not None else (0, len(doc.text))
+        span = exact_quote_span(doc.text, src["quote"], *scope) if src["quote"] else None
         if src["quote"] and span is None:
-            issues.append({"type": "bad_quote", "hard": False,
-                           "detail": f"цитата не найдена в документе «{doc.title}»: «{src['quote'][:80]}»"})
+            issues.append({"type": "bad_quote", "hard": True,
+                           "detail": f"дословная цитата не найдена в указанном положении документа «{doc.title}»: "
+                                     f"«{src['quote'][:80]}»"})
+        if unit is None and not src["quote"]:
+            issues.append({"type": "missing_evidence", "hard": True,
+                           "detail": f"для документа «{doc.title}» нужны точный пункт или дословная цитата"})
         if span:
             item["start"], item["end"] = span
             if unit is None:                       # locate the unit that contains the quote
                 unit = next((u for u in doc.units if u.start <= span[0] < u.end + 1), None)
         elif unit is not None:
-            item["start"], item["end"] = unit.start, unit.end
+            item["start"], item["end"] = scope
         if unit is not None:
             item["unit_idx"] = unit.idx
-            if not item["locator"]:
-                item["locator"] = unit.locator
-        item["ok"] = (unit is not None or not keys) and (span is not None or not src["quote"])
+            # Display a locator from the registry, never a model's unvalidated label.
+            item["locator"] = unit.locator
+        item["ok"] = not bad_locator and (span is not None or (unit is not None and not src["quote"]))
+        if item["ok"]:
+            item["quote"] = doc.text[item["start"]:item["end"]]
         resolved.append(item)
+
+    if require_sources and parsed.get("status") in ("ANSWER", "PARTIAL") and not any(s["ok"] for s in resolved):
+        issues.append({"type": "missing_source", "hard": True,
+                       "detail": "юридический ответ должен содержать хотя бы одно проверенное положение"})
 
     # ---- 2. numbers and dates
     support: set = set()
@@ -126,8 +223,9 @@ def verify(parsed: dict, kb, context_doc_ids: list, question_text: str, extra_te
     question_values = support_values(question_text + "\n" + extra_text)
     support |= question_values
     quote_values: set = set()
-    for src in parsed.get("sources", []):
-        quote_values |= support_values(src.get("quote", ""))
+    for src in resolved:
+        if src["ok"]:
+            quote_values |= support_values(src.get("quote", ""))
     operands = _floats(question_values | quote_values)
 
     checked = 0
