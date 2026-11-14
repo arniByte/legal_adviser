@@ -1,0 +1,11 @@
+.venv
+dist
+eval
+docs
+presentation
+scripts
+tests
+data/sample_submission
+data/demo_*.csv
+**/__pycache__
+.pytest_cache

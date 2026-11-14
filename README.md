@@ -68,6 +68,16 @@ docker compose up --build
 
 **Модели и ключ.** По условиям кейса используются DeepSeek V4.1 Flash, BAAI/bge-m3 и Qwen3 Reranker 8B. Подойдёт любой OpenAI-совместимый сервис с этими моделями, например OpenRouter: получить ключ на openrouter.ai, указать в `.env` `LLM_BASE_URL=https://openrouter.ai/api/v1` и `LLM_API_KEY=<ключ>`, перезапустить `docker compose up`.
 
+### Веб-версия на Vercel
+
+Тот же сервер разворачивается на Vercel без изменений кода: `api/index.py` отдаёт приложение, `vercel.json` направляет туда все адреса и включает в сборку ядро, интерфейс и базу знаний.
+
+1. Импортировать репозиторий в Vercel (Add New → Project), настройки сборки не менять.
+2. В Settings → Environment Variables задать `LLM_BASE_URL` и `LLM_API_KEY`; при необходимости — `LLM_MODEL`, `EMB_MODEL`, `RERANKER_MODEL`.
+3. Deploy. Интерфейс откроется по адресу проекта, API — по тем же путям, что и локально.
+
+На бесплатном тарифе функция живёт до 60 секунд на запрос, этого хватает на ответ. Векторный индекс считается заново при холодном старте, пока его нет — работает поиск по словам.
+
 **Порт:** 8000 — интерфейс и API (`/api/health`, `/api/documents`, `/api/chat`, `/api/chat/stream`; описание — `/api/docs`).
 
 **Зависимости** зафиксированы в `requirements.txt`: FastAPI, Uvicorn, Pydantic, HTTPX, NumPy — все из списка, разрешённого организаторами. Интерфейс — HTML, CSS и JavaScript без сборки, шрифты подключены локально.
