@@ -25,7 +25,26 @@
   const HINTS = ["про аренду", "про срок оплаты", "про испытательный срок", "про ставку НДС", "про согласование договора", "про персональные данные"];
 
   const P = window.Paragraf;
-  const state = { messages: [], docs: [], byId: {}, busy: false, apiReady: false, starters: [], startersAt: 0, cat: "" };
+
+  // ---------------------------------------------------------------- history in this browser
+  const STORE_KEY = "paragraf.chats.v1";
+  const MAX_CHATS = 20;
+  let memoryChats = [];                         // used when the browser blocks storage
+  function loadChats() {
+    try { const raw = localStorage.getItem(STORE_KEY); return raw ? JSON.parse(raw) : []; } catch (e) { return memoryChats; }
+  }
+  function saveChats(list) {
+    memoryChats = list.slice(0, MAX_CHATS);
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(memoryChats)); } catch (e) { /* storage full or blocked: keep in memory */ }
+  }
+  const hashOf = (s) => { let h = 0; for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) | 0; return Math.abs(h); };
+  const when = (t) => {
+    const d = new Date(t), now = new Date();
+    const time = d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+    if (d.toDateString() === now.toDateString()) return "сегодня, " + time;
+    return d.toLocaleDateString("ru-RU", { day: "numeric", month: "long" }) + ", " + time;
+  };
+  const state = { messages: [], results: [], chatId: null, docs: [], byId: {}, busy: false, apiReady: false, starters: [], startersAt: 0, cat: "" };
   const input = $("input");
   input.placeholder = " ";                      // lets CSS hide the animated hint once something is typed
   const fmt = (x) => x.toFixed(1).replace(".", ",");
@@ -127,6 +146,8 @@
     if (state.busy) return;
     hidePop();
     state.messages = [];
+    state.results = [];
+    state.chatId = null;
     $("thread").innerHTML = "";
     document.body.classList.remove("chatting");
     closeReader();
@@ -140,10 +161,13 @@
     const show = open === undefined ? menu.hidden : open;
     menu.hidden = !show;
     navButton.setAttribute("aria-expanded", String(show));
+    renderFlyout(show);
     if (show && byKeyboard) menu.querySelector(".menu__item").focus();      // a mouse click does not light up the first item
   }
   navButton.addEventListener("click", (e) => toggleMenu(undefined, e.detail === 0));
-  document.addEventListener("pointerdown", (e) => { if (!menu.hidden && !menu.contains(e.target) && !navButton.contains(e.target)) toggleMenu(false); });
+  document.addEventListener("pointerdown", (e) => {
+    if (!menu.hidden && !menu.contains(e.target) && !navButton.contains(e.target) && !$("flyout").contains(e.target)) toggleMenu(false);
+  });
   menu.addEventListener("keydown", (e) => {
     const items = [...menu.querySelectorAll(".menu__item")];
     const i = items.indexOf(document.activeElement);
@@ -158,8 +182,63 @@
     toggleMenu(false);
     if (item.dataset.action === "new") reset();
     if (item.dataset.action === "docs") openLibrary();
+    if (item.dataset.action === "chats") openChats();
     if (item.dataset.action === "about") openAbout();
   });
+
+  // ---------------------------------------------------------------- recent chats
+  const coverCache = {};
+  const cover = (id) => (coverCache[id] = coverCache[id] || P.auraImage(["psb", "soft", "night"][hashOf(id) % 3], hashOf(id) % 17, true));
+
+  function chatCard(c, i, compact) {
+    const b = el("button", compact ? "flyout__item" : "chat-card");
+    b.type = "button";
+    b.style.animationDelay = i * 40 + "ms";
+    const img = el("span", compact ? "flyout__cover" : "chat-card__cover");
+    img.style.backgroundImage = `url(${cover(c.id)})`;
+    const text = el("span", compact ? "flyout__text" : "chat-card__text");
+    const asked = c.messages.filter((m) => m.role === "user").length;
+    text.append(el("span", compact ? "flyout__title" : "chat-card__title", c.title),
+      el("span", "caption", when(c.at) + " · " + asked + " " + plural(asked, "вопрос", "вопроса", "вопросов")));
+    b.append(img, text);
+    if (!compact) b.insertAdjacentHTML("beforeend", ICON.arrow.replace("<svg", '<svg class="chat-card__go"'));
+    b.addEventListener("click", () => restoreChat(c.id));
+    return b;
+  }
+
+  function renderFlyout(show) {
+    const fly = $("flyout");
+    const list = loadChats().slice(0, 4);
+    if (!show || !list.length || window.innerWidth < 900) { fly.hidden = true; return; }
+    fly.innerHTML = "";
+    fly.append(el("div", "caption flyout__head", "Недавние"));
+    list.forEach((c, i) => fly.append(chatCard(c, i, true)));
+    fly.hidden = false;
+  }
+
+  function openChats() {
+    const body = document.createDocumentFragment();
+    const list = loadChats();
+    if (!list.length) {
+      body.append(el("p", "sheet__verdict", "Здесь появятся твои разговоры. Они хранятся только в этом браузере."));
+    } else {
+      const grid = el("div", "chat-grid");
+      list.forEach((c, i) => grid.append(chatCard(c, i, false)));
+      body.append(grid);
+      const foot = el("div", "chats-foot");
+      foot.append(el("span", "caption", "Последние " + MAX_CHATS + " разговоров, только в этом браузере."));
+      const clear = el("button", "btn btn--small danger", "Очистить историю");
+      clear.type = "button";
+      clear.addEventListener("click", () => {                     // works on the second press
+        if (!clear.classList.contains("armed")) { clear.classList.add("armed"); clear.textContent = "Точно очистить?"; return; }
+        saveChats([]); closeSheet();
+      });
+      foot.append(clear);
+      body.append(foot);
+    }
+    openSheet("История", "Разговоры", body);
+    $("sheet").classList.add("sheet--wide");
+  }
 
   // ---------------------------------------------------------------- conversation
   const thread = $("thread");
@@ -197,7 +276,9 @@
     try {
       const result = await stream(state.messages, reply.stage);
       state.messages.push({ role: "assistant", content: result.answer });
+      state.results.push(result);
       render(reply, result);
+      rememberChat();
     } catch (err) {
       state.messages.pop();
       reply.mk.stop();
@@ -212,6 +293,31 @@
       syncSend();
       scrollDown(); input.focus();
     }
+  }
+
+  function rememberChat() {
+    state.chatId = state.chatId || Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const list = loadChats().filter((c) => c.id !== state.chatId);
+    list.unshift({ id: state.chatId, at: Date.now(), title: state.messages[0].content.slice(0, 140),
+                   messages: state.messages, results: state.results });
+    saveChats(list);
+  }
+
+  function restoreChat(id) {
+    const chat = loadChats().find((c) => c.id === id);
+    if (!chat || state.busy) return;
+    closeSheet(); toggleMenu(false); closeReader();
+    state.chatId = chat.id;
+    state.messages = chat.messages.slice();
+    state.results = chat.results.slice();
+    thread.innerHTML = "";
+    document.body.classList.add("chatting");
+    let k = 0;
+    chat.messages.forEach((m) => {
+      if (m.role === "user") addUser(m.content);
+      else if (chat.results[k]) { const box = el("div", "reply"); thread.append(box); render({ m: box }, chat.results[k++], true); }
+    });
+    window.scrollTo({ top: 0 });
   }
 
   async function stream(messages, onStage) {
@@ -256,8 +362,8 @@
     return marks;
   }
 
-  function render(reply, r) {
-    reply.mk.stop();
+  function render(reply, r, restored) {
+    if (reply.mk) reply.mk.stop();
     const box = reply.m;
     box.innerHTML = "";
     if (STATE_TEXT[r.status]) box.append(el("div", "state " + r.status, STATE_TEXT[r.status]));
@@ -336,7 +442,7 @@
     box.append(tools);
 
     const first = r.sources.find((s) => s.ok && s.start !== null);
-    if (first && window.innerWidth >= 1200) setTimeout(() => openDoc(first.doc_id, r.sources, r.sources.indexOf(first)), 900);
+    if (first && !restored && window.innerWidth >= 1200) setTimeout(() => openDoc(first.doc_id, r.sources, r.sources.indexOf(first)), 900);
   }
 
   // ---------------------------------------------------------------- popovers
@@ -377,6 +483,7 @@
   function openSheet(kind, title, body) {
     hidePop();
     lastFocus = document.activeElement;
+    $("sheet").classList.remove("sheet--wide");
     $("sheetKind").textContent = kind;
     $("sheetTitle").textContent = title;
     const host = $("sheetBody"); host.innerHTML = ""; host.append(body);

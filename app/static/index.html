@@ -46,6 +46,9 @@
       <button class="menu__item" role="menuitem" type="button" data-action="new">
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4.5v11M4.5 10h11"/></svg><span>Новый разговор</span>
       </button>
+      <button class="menu__item" role="menuitem" type="button" data-action="chats">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4.5 6.5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H9l-3 2.5v-2.5h0a1.5 1.5 0 0 1-1.5-1.5z"/></svg><span>Разговоры</span>
+      </button>
       <button class="menu__item" role="menuitem" type="button" data-action="docs">
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.5h5.5L15 7v9.5H6z"/><path d="M11.5 3.5V7H15M8.5 10.5h4M8.5 13h4"/></svg><span>Документы базы</span>
       </button>
@@ -53,6 +56,7 @@
         <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="6.5"/><path d="M10 9.2v4M10 6.6v.01"/></svg><span>Как это работает</span>
       </button>
     </div>
+    <div class="flyout glass" id="flyout" aria-label="Недавние разговоры" hidden></div>
   </footer>
 </main>
 
@@ -110,6 +114,7 @@
 
 <div class="pop" id="pop" role="tooltip" hidden></div>
 <script src="/static/mark.js"></script>
+<script src="/static/trail.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

@@ -399,3 +399,50 @@ mark.focus { background: linear-gradient(90deg, rgba(80, 70, 216, 0.2), rgba(242
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-delay: 0ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
 }
+
+/* ------------------------------------------------------------------ cursor trail */
+.trail { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+.trail img { position: absolute; will-change: transform, opacity; }
+
+/* ------------------------------------------------------------------ recent chats */
+.flyout {
+  position: absolute; left: calc(var(--gutter) + 16.75rem); bottom: calc(100% - 0.75rem); width: 19rem; padding: 0.5rem; border-radius: var(--radius);
+  animation: menu-in 0.38s var(--ease-spring) 60ms backwards; transform-origin: 0 100%;
+}
+.flyout__head { padding: 0.5rem 0.625rem 0.375rem; }
+.flyout__item {
+  display: flex; align-items: center; gap: 0.75rem; width: 100%; min-height: 3.25rem; padding: 0.375rem 0.5rem; border-radius: 0.875rem;
+  text-align: left; animation: rise 0.32s var(--ease) backwards; transition: background-color var(--fast);
+}
+.flyout__item:hover, .flyout__item:focus-visible { background: rgba(255, 255, 255, 0.85); outline: none; }
+.flyout__cover { flex: none; width: 2.25rem; height: 2.25rem; border-radius: 50%; background: center / 120% no-repeat; filter: blur(1px) saturate(1.1); transition: transform var(--medium) var(--ease); }
+.flyout__item:hover .flyout__cover { transform: rotate(30deg) scale(1.08); }
+.flyout__text { display: grid; min-width: 0; }
+.flyout__title { font-size: var(--text-small); font-weight: 540; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.chat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: 0.75rem; margin-top: 1rem; }
+.chat-card {
+  position: relative; overflow: hidden; display: grid; gap: 0.75rem; align-content: space-between; min-height: 9rem; padding: 1.125rem 1.125rem 1rem;
+  border-radius: var(--radius); text-align: left; background: rgba(255, 255, 255, 0.62);
+  box-shadow: inset 0 0 0 1px var(--glass-edge), var(--glass-shadow); animation: rise 0.4s var(--ease) backwards;
+  transition: transform var(--medium) var(--ease), box-shadow var(--medium) var(--ease);
+}
+.chat-card__cover {
+  position: absolute; top: -3.5rem; right: -3rem; width: 11rem; height: 11rem; border-radius: 50%; background: center / cover no-repeat;
+  filter: blur(18px) saturate(1.2); opacity: 0.85; transition: transform 0.9s var(--ease); pointer-events: none;
+}
+.chat-card__text { position: relative; display: grid; gap: 0.375rem; }
+.chat-card__title { font-weight: 560; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.chat-card__go {
+  position: relative; justify-self: end; width: 2.25rem; height: 2.25rem; padding: 0.5rem; border-radius: 50%; background: var(--ink); color: #fff;
+  opacity: 0; transform: translateX(-6px); transition: opacity var(--fast), transform var(--medium) var(--ease-spring);
+}
+@media (hover: hover) {
+  .chat-card:hover { transform: translateY(-3px); box-shadow: inset 0 0 0 1px #fff, 0 22px 40px -22px rgba(23, 22, 58, 0.45); }
+  .chat-card:hover .chat-card__cover { transform: scale(1.35) rotate(40deg); }
+  .chat-card:hover .chat-card__go { opacity: 1; transform: none; }
+}
+@media (hover: none) { .chat-card__go { opacity: 1; transform: none; } }
+.chats-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+.danger { color: var(--danger-ink); background: rgba(192, 40, 47, 0.08); box-shadow: inset 0 0 0 1px rgba(192, 40, 47, 0.25); }
+.danger.armed { background: #d93a2b; color: #fff; box-shadow: none; }
