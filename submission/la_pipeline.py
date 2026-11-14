@@ -264,6 +264,7 @@ class AnswerResult:
     extra: str = ""            # related provisions the user did not ask about (shown in the UI, not in the submission)
     trimmed: bool = False      # the answer exceeded the word cap and its tail was moved to `extra`
     edited: bool = False       # the editing pass removed side facts; they were moved to `extra` as well
+    grounded_fallback: bool = False  # a known-invalid draft was replaced by whole verified provisions
 
 
 class Assistant:
@@ -373,6 +374,16 @@ class Assistant:
                 result.edited = True
                 extra = (removed + " " + extra).strip()
             timings["edit"] = round(time.monotonic() - t, 3)
+        # Check the actual submitted text, including the editor's deletions. An
+        # unsuccessful repair must not leave a known-invalid assertion in the CSV.
+        final_parsed = dict(parsed, answer=answer)
+        final_report = verify(final_parsed, self.kb, ctx.doc_ids, dialog.full_text, hint_text)
+        if final_report["hard"]:
+            parsed, report = self._grounded_fallback(final_report, ctx, dialog, hint_text)
+            answer, extra = parsed["answer"], ""
+            result.grounded_fallback = True
+        else:
+            report = final_report
         result.extra = extra[:2000]
         result.answer = answer[:9500]
         result.status = parsed["status"]
@@ -405,6 +416,48 @@ class Assistant:
             if ref not in refs:
                 refs.append(ref)
         return answer.rstrip() + " Источник: " + "; ".join(refs) + "."
+
+    def _grounded_fallback(self, report, ctx, dialog, hint_text):
+        """Quote a whole supported provision rather than repeating a detected error.
+
+        Long clauses are not truncated: cutting away a condition can reverse the
+        norm. If no short, checkable provision is available, report the failure.
+        """
+        blocks, sources, seen = [], [], set()
+        words_used = 0
+        for src in report["sources"]:
+            doc = self.kb.by_id.get(src["doc_id"])
+            if doc is None or src["unit_idx"] is None:
+                continue
+            unit = doc.units[src["unit_idx"]]
+            key = (doc.doc_id, unit.idx)
+            if key in seen:
+                continue
+            seen.add(key)
+            # Subpoints rely on a parent lead-in, so don't detach them from it.
+            if unit.kind == "subpoint":
+                continue
+            quote = squash(unit.text)
+            block = f"{doc.title}" + (f", {unit.locator}" if unit.locator else "") + f": «{quote.rstrip('.')}»."
+            size = len(block.split())
+            if size > 90 or words_used + size > 130:
+                continue
+            blocks.append(block)
+            sources.append(dict(doc_id=doc.doc_id, locator=unit.locator, quote=quote))
+            words_used += size
+            if len(blocks) == 2:
+                break
+        if blocks:
+            parsed = dict(status="PARTIAL", answer="Не удалось подтвердить первоначальный вывод. "
+                          "В документах указано: " + " ".join(blocks), sources=sources,
+                          analysis="Программно приведены целые положения вместо ответа с неустранённой ошибкой.")
+            checked = verify(parsed, self.kb, ctx.doc_ids, dialog.full_text, hint_text)
+            if not checked["hard"]:
+                return parsed, checked
+        parsed = dict(status="ERROR", answer="Не удалось надёжно подтвердить ответ по документам. "
+                      "Без подтверждения вывод не сформулирован; требуется проверка юристом.", sources=[],
+                      analysis="Ответ с неустранённой ошибкой не выдан.")
+        return parsed, verify(parsed, self.kb, ctx.doc_ids, dialog.full_text, hint_text)
 
     def _extractive_fallback(self, ctx) -> str:
         """Used only when the model is unreachable: quote the closest provision verbatim, add nothing."""
