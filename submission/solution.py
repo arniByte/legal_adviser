@@ -195,7 +195,7 @@ def main() -> int:
     assistant = Assistant(kb, retriever, llm, s)
     pacer = Pacer(deadline, s.max_workers)
     state = {"started": 0, "done": 0, "modes": {}, "status": {}, "passes": 0, "repaired": 0, "issues": 0,
-             "seconds": [], "errors": 0, "words": [], "extra": 0, "trimmed": 0, "edited": 0}
+             "seconds": [], "errors": 0, "words": [], "extra": 0, "trimmed": 0, "edited": 0, "grounded_fallback": 0}
     total = len(questions)
 
     def work(position: int):
@@ -236,6 +236,7 @@ def main() -> int:
                     state["extra"] += int(bool(result.extra))
                     state["trimmed"] += int(result.trimmed)
                     state["edited"] += int(result.edited)
+                    state["grounded_fallback"] += int(result.grounded_fallback)
                     state["errors"] += int(bool(result.error))
                     if state["done"] == 1:
                         log(f"first answer: {result.timings}; status {result.status}; passes {result.passes}; "
@@ -258,7 +259,7 @@ def main() -> int:
     words = sorted(state["words"]) or [0]
     log(f"answer words p50/p90/max: {words[len(words) // 2]}/{words[int(len(words) * 0.9) - 1]}/{words[-1]}; "
         f"answers with side notes kept out: {state['extra']}; trimmed by the word cap: {state['trimmed']}; "
-        f"shortened by the editing pass: {state['edited']}")
+        f"shortened by the editing pass: {state['edited']}; grounded fallbacks: {state['grounded_fallback']}")
     print(f"submission.csv: {len(answers)}/{total} answers", flush=True)
     log(f"pacing: seconds per question measured full {pacer.estimate('full'):.1f}, lite {pacer.estimate('lite'):.1f}")
     log(f"done: {len(answers)}/{total} answers; modes {state['modes']}; statuses {state['status']}; "

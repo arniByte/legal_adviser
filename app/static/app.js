@@ -21,7 +21,7 @@
   };
   const STAGES = { retrieval: "Ищу в документах", generation: "Формулирую ответ", second_pass: "Ищу шире", verification: "Сверяю с текстом", repair: "Уточняю ответ", edit: "Убираю лишнее" };
   const STEP_NAMES = { retrieval: "Поиск по базе", generation: "Ответ модели", second_pass: "Расширенный поиск", verification: "Сверка с текстом", repair: "Исправление", edit: "Редактура" };
-  const STATE_TEXT = { PARTIAL: "Подтверждено частично", NOT_IN_KB: "В базе нет сведений", OFF_TOPIC: "Вне юридической темы", ILLEGAL: "С этим не помогу", ROLE: "Правила не меняются", ERROR: "Техническая ошибка" };
+  const STATE_TEXT = { PARTIAL: "Подтверждено частично", NOT_IN_KB: "В базе нет сведений", OFF_TOPIC: "Вне юридической темы", ILLEGAL: "С этим не помогу", ROLE: "Правила не меняются", ERROR: "Не удалось подготовить проверенный ответ" };
   const HINTS = ["про аренду", "про срок оплаты", "про испытательный срок", "про ставку НДС", "про согласование договора", "про персональные данные"];
 
   const P = window.Paragraf;
@@ -317,10 +317,10 @@
     const tools = el("div", "tools");
     tools.style.animationDelay = settle + 0.2 + "s";
     const c = r.checks;
-    if (["ANSWER", "PARTIAL", "ILLEGAL"].includes(r.status) && r.sources.length) {   // a refusal has nothing to verify
+    if (["ANSWER", "PARTIAL"].includes(r.status) && r.sources.length) {   // a refusal has nothing to verify
       const seal = el("button", "btn btn--glass btn--small seal" + (c.verified ? "" : " warn"));
       seal.type = "button";
-      seal.innerHTML = (c.verified ? ICON.check : ICON.warn) + `<span>${c.verified ? "Сверено с документами" : "Проверь ответ"}</span>`;
+      seal.innerHTML = (c.verified ? ICON.check : ICON.warn) + `<span>${c.verified ? "Проверены ссылки и значения" : "Проверь ответ"}</span>`;
       seal.addEventListener("click", () => openCheck(r));
       tools.append(seal);
     }
@@ -449,8 +449,8 @@
       body.append(el("h3", "", "Что не подтвердилось"));
       const ul = el("ul", "list"); c.hard_issues.forEach((x) => ul.append(el("li", "", x))); body.append(ul);
     }
-    body.append(el("p", "sheet__verdict", "Сверка ловит неподтверждённые числа, даты, названия и ссылки. Логику вывода она не проверяет — решение остаётся за юристом."));
-    openSheet("Сверка ответа", c.verified ? "Каждый факт найден в документах" : "Не всё подтверждено документами", body);
+    body.append(el("p", "sheet__verdict", "Код проверяет, что положения существуют, а числа подтверждаются именно теми пунктами, на которые ссылается ответ. Числа из вопроса — условия задачи, а не факты документа. Правильность юридического вывода проверка не доказывает: решение остаётся за юристом."));
+    openSheet("Сверка ответа", c.verified ? "Ссылки, цитаты и значения проверены" : "Не всё подтверждено документами", body);
   }
 
   function openTrace(r) {
