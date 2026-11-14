@@ -92,6 +92,7 @@ async function video(browser) {
   const glide = async (x, y, steps = 30) => page.mouse.move(x, y, { steps });
   await page.goto(APP, { waitUntil: 'networkidle' });
   await page.waitForTimeout(1200);
+  await glide(1150, 140, 40); await glide(150, 420, 60); await glide(1100, 600, 60);   // a trail on the empty background
   await glide(900, 200); await glide(380, 260); await glide(640, 240);     // the mascot follows the pointer
   await page.mouse.move(640, 190); await page.waitForTimeout(900);         // smiles on hover
   await page.mouse.down(); await page.mouse.up(); await page.waitForTimeout(1200);   // dots scatter and come back
@@ -115,8 +116,12 @@ async function video(browser) {
   await page.click('#input');
   await ask(page, 'Какой размер пособия по беременности и родам?', 40);
   await page.waitForTimeout(3000);
-  await click(page, '#navButton'); await page.waitForTimeout(1200);
-  await click(page, '[data-action=docs]'); await page.waitForTimeout(2600);
+  await click(page, '#navButton'); await page.waitForTimeout(1800);              // recent chats beside the menu
+  await click(page, '[data-action=chats]'); await page.waitForTimeout(1200);
+  await glide(560, 360, 20); await page.waitForTimeout(1200);
+  await page.keyboard.press('Escape'); await page.waitForTimeout(400);
+  await click(page, '#navButton'); await page.waitForTimeout(500);
+  await click(page, '[data-action=docs]'); await page.waitForTimeout(2400);
   const video = page.video();
   await ctx.close();
   const webm = await video.path();
