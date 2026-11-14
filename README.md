@@ -6,6 +6,8 @@
 
 Решение кейса ПСБ «Юридический ассистент» (Hack&Change 2026).
 
+**Попробовать онлайн: [paragraf-theta.vercel.app](https://paragraf-theta.vercel.app)** · [видео на минуту](docs/media/demo.mp4) · [презентация](presentation/paragraf.pdf)
+
 ## Как это работает
 
 <p align="center"><img src="docs/assets/how-it-works.jpg" alt="Четыре шага: вопрос, поиск, ответ, сверка" width="100%"></p>
@@ -70,7 +72,9 @@ docker compose up --build
 
 ### Веб-версия на Vercel
 
-Тот же сервер разворачивается на Vercel без изменений кода: `api/index.py` отдаёт приложение, `vercel.json` направляет туда все адреса и включает в сборку ядро, интерфейс и базу знаний.
+Развёрнутая версия: **https://paragraf-theta.vercel.app** — без установки, в браузере.
+
+Тот же сервер разворачивается на Vercel без изменений кода: Vercel сам распознаёт FastAPI-приложение (`api/index.py`), а `.vercelignore` не пускает в сборку материалы оценки, презентацию и видео.
 
 1. Импортировать репозиторий в Vercel (Add New → Project), настройки сборки не менять.
 2. В Settings → Environment Variables задать `LLM_BASE_URL` и `LLM_API_KEY`; при необходимости — `LLM_MODEL`, `EMB_MODEL`, `RERANKER_MODEL`.
