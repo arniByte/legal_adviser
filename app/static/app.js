@@ -125,6 +125,7 @@
 
   function reset() {
     if (state.busy) return;
+    hidePop();
     state.messages = [];
     $("thread").innerHTML = "";
     document.body.classList.remove("chatting");
@@ -316,7 +317,7 @@
     const tools = el("div", "tools");
     tools.style.animationDelay = settle + 0.2 + "s";
     const c = r.checks;
-    if (r.status !== "OFF_TOPIC" && r.status !== "ROLE") {
+    if (["ANSWER", "PARTIAL", "ILLEGAL"].includes(r.status) && r.sources.length) {   // a refusal has nothing to verify
       const seal = el("button", "btn btn--glass btn--small seal" + (c.verified ? "" : " warn"));
       seal.type = "button";
       seal.innerHTML = (c.verified ? ICON.check : ICON.warn) + `<span>${c.verified ? "Сверено с документами" : "Проверь ответ"}</span>`;
@@ -352,7 +353,8 @@
     pop.style.left = left + "px"; pop.style.top = top + "px";
     requestAnimationFrame(() => pop.classList.add("on"));
   }
-  function hidePop() { pop.classList.remove("on"); popTimer = setTimeout(() => { pop.hidden = true; }, 260); }
+  function hidePop() { clearTimeout(popTimer); pop.classList.remove("on"); popTimer = setTimeout(() => { pop.hidden = true; }, 260); }
+  window.addEventListener("scroll", hidePop, { passive: true });
   function hover(node, build) {
     if (!window.matchMedia("(hover: hover)").matches) return;
     node.addEventListener("mouseenter", () => showPop(node, build()));
@@ -373,6 +375,7 @@
   const backdrop = $("sheetBackdrop");
   let lastFocus = null;
   function openSheet(kind, title, body) {
+    hidePop();
     lastFocus = document.activeElement;
     $("sheetKind").textContent = kind;
     $("sheetTitle").textContent = title;
@@ -498,6 +501,7 @@
   // ---------------------------------------------------------------- reader: full text of a document
   const docCache = {};
   async function openDoc(id, sources, focusIndex) {
+    hidePop();
     let doc = docCache[id];
     if (!doc) { try { doc = docCache[id] = await getJSON("/api/documents/" + id); } catch (e) { return; } }
     const list = sources || [];
