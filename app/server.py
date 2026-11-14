@@ -36,13 +36,13 @@ MAX_TURNS = 12
 MAX_CHARS = 4000
 
 STATUS_LABELS = {
-    "ANSWER": "Подтверждено документами",
+    "ANSWER": "Ответ по найденным положениям",
     "PARTIAL": "Подтверждено частично",
     "NOT_IN_KB": "В базе знаний нет сведений",
     "OFF_TOPIC": "Вне компетенции ассистента",
     "ILLEGAL": "Отказ: противоправный запрос",
     "ROLE": "Попытка изменить правила отклонена",
-    "ERROR": "Техническая ошибка",
+    "ERROR": "Не удалось подготовить проверенный ответ",
 }
 
 SUGGESTIONS = [
@@ -223,7 +223,7 @@ def _present(result) -> dict:
         "checks": {"numbers_checked": result.checked_numbers, "sources_total": len(sources),
                    "sources_ok": ok_sources, "hard_issues": [i["detail"] for i in hard],
                    "notes": [i["detail"] for i in soft], "repaired": result.repaired,
-                   "verified": not hard},
+                   "verified": not hard and ok_sources > 0 and result.status in ("ANSWER", "PARTIAL")},
         "trace": {"analysis": result.analysis, "hints": result.hints, "passes": result.passes,
                   "mode": result.mode, "timings": result.timings,
                   "context": [{"id": d, "title": _doc_summary(kb.by_id[d])["title"],

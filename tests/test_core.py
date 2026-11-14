@@ -309,6 +309,28 @@ def test_verifier_catches_injected_and_invented_facts(kb):
     assert memory["hard"] == 1                                    # the base says "до трех лет"
 
 
+def test_verifier_binds_values_to_the_cited_clause(kb):
+    """A value must come from the provision the answer cites, not from anywhere in the base."""
+    quote = "D2 | п. 4.2 | Покупатель оплачивает Товар в течение 30 (тридцати) календарных дней"
+    right = _check(kb, f"<status>ANSWER</status><answer>Покупатель оплачивает товар в течение 30 календарных дней "
+                       f"(п. 4.2).</answer><sources>\n{quote}\n</sources>", "Какой срок оплаты по П-17/2024?")
+    assert right["hard"] == 0
+    # 45 days is a real term, but of the other supplier's contract: here it is a wrong fact
+    swapped = _check(kb, f"<status>ANSWER</status><answer>Покупатель оплачивает товар в течение 45 календарных дней "
+                         f"(п. 4.2).</answer><sources>\n{quote}\n</sources>", "Какой срок оплаты по П-17/2024?")
+    assert any(i["type"] == "source_number_mismatch" and "45" in i["detail"] for i in swapped["issues"])
+
+
+def test_verifier_rejects_missing_clauses_but_not_their_denial(kb):
+    src = "D2 | п. 7.2 | За просрочку оплаты Товара Покупатель уплачивает Поставщику неустойку"
+    made_up = _check(kb, f"<status>ANSWER</status><answer>За просрочку оплаты — неустойка 0,1% за каждый день "
+                         f"(п. 9.5).</answer><sources>\n{src}\n</sources>", "Какая неустойка?")
+    assert any(i["type"] == "bad_inline_locator" for i in made_up["issues"])
+    denied = _check(kb, f"<status>ANSWER</status><answer>Пункта 9.5 в договоре нет; неустойка за просрочку оплаты — "
+                        f"0,1% за каждый день (п. 7.2).</answer><sources>\n{src}\n</sources>", "Что в п. 9.5?")
+    assert not any(i["type"] == "bad_inline_locator" for i in denied["issues"])
+
+
 def test_verifier_allows_user_numbers_and_arithmetic(kb):
     premise = _check(kb, "<status>ANSWER</status><answer>По договору аренды № А-08/2024 плата 450 000 рублей, а не "
                          "500 000 (п. 3.1).</answer>", "Почему арендная плата 500 000 рублей?")
