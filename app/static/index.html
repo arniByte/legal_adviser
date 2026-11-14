@@ -5,77 +5,111 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Параграф</title>
 <meta name="description" content="Юридический ассистент: ответы по базе нормативных документов со ссылкой на пункт.">
-<meta name="theme-color" content="#f4f3f0">
+<meta name="theme-color" content="#f3f3f1">
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
 <link rel="preload" href="/static/fonts/onest-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
-<div class="aura" aria-hidden="true"><i class="b1"></i><i class="b2"></i><i class="b3"></i><i class="b4"></i></div>
-<div class="grain" aria-hidden="true"></div>
 
-<header class="bar">
-  <button class="brand" id="home" type="button" aria-label="Новый диалог">
-    <span class="orb small" aria-hidden="true"></span>
-    <span>Параграф</span>
-  </button>
-  <nav class="bar-actions">
-    <button class="pill" id="docsOpen" type="button">Документы</button>
-    <button class="icon" id="newChat" type="button" aria-label="Новый диалог" data-tip="Новый диалог">
-      <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
-    </button>
-  </nav>
-</header>
-
-<main class="stage" id="stage">
-  <section class="hero" id="hero">
-    <div class="orb big" aria-hidden="true"></div>
-    <h1>Что нужно проверить?</h1>
-    <p>Отвечаю по договорам, регламентам и законам из базы — со ссылкой на пункт.</p>
+<main class="page" id="page">
+  <section class="home" id="home">
+    <div class="home__mark" id="heroMark"></div>
+    <h1 class="title rise" style="--i:1">Что проверить по документам?</h1>
+    <p class="lead rise" style="--i:2">Отвечаю по договорам, регламентам и законам базы — со ссылкой на пункт и сверкой каждого числа.</p>
+    <div class="starters" id="starters"></div>
+    <button class="btn btn--glass btn--small rise" style="--i:5" id="shuffle" type="button">Другие вопросы</button>
   </section>
 
   <section class="thread" id="thread" aria-live="polite"></section>
 
-  <div class="dock" id="dock">
-    <div class="notice" id="notice" hidden></div>
-    <form class="composer" id="composer" autocomplete="off">
-      <textarea id="input" rows="1" placeholder="Спросите о договоре, сроке или норме закона" maxlength="4000" aria-label="Вопрос"></textarea>
-      <button class="send" id="send" type="submit" aria-label="Отправить">
-        <svg viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
+  <footer class="composer" id="dock">
+    <div class="notice" id="notice" role="status" hidden></div>
+    <div class="composer__wrap">
+      <button class="nav-button" id="navButton" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="menu" aria-label="Разделы">
+        <span class="nav-button__glow" aria-hidden="true"><canvas id="navGlow"></canvas></span>
+        <span id="navMark"></span>
       </button>
-    </form>
-    <div class="suggestions" id="suggestions"></div>
-  </div>
+      <form class="composer__row" id="composer" autocomplete="off">
+        <div class="composer__field-wrap">
+          <textarea id="input" class="composer__field" rows="1" maxlength="4000" aria-label="Вопрос"></textarea>
+          <div class="composer__hint" id="hint" aria-hidden="true">Спроси <span class="cycle" id="hintCycle">про аренду</span></div>
+        </div>
+        <button class="composer__send" id="send" type="submit" aria-label="Отправить">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 15.5v-11M5.5 9 10 4.5 14.5 9"/></svg>
+        </button>
+      </form>
+    </div>
+    <p class="caption composer__note">Параграф отвечает только по документам базы. Важное сверяй с источником.</p>
+
+    <div class="menu glass" id="menu" role="menu" aria-label="Разделы" hidden>
+      <button class="menu__item" role="menuitem" type="button" data-action="new">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4.5v11M4.5 10h11"/></svg><span>Новый разговор</span>
+      </button>
+      <button class="menu__item" role="menuitem" type="button" data-action="docs">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.5h5.5L15 7v9.5H6z"/><path d="M11.5 3.5V7H15M8.5 10.5h4M8.5 13h4"/></svg><span>Документы базы</span>
+      </button>
+      <button class="menu__item" role="menuitem" type="button" data-action="about">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="6.5"/><path d="M10 9.2v4M10 6.6v.01"/></svg><span>Как это работает</span>
+      </button>
+    </div>
+  </footer>
 </main>
 
-<aside class="sheet" id="sheet" aria-label="Документ" hidden>
-  <div class="sheet-inner">
-    <header class="sheet-head">
-      <div>
-        <div class="sheet-kind" id="sheetKind"></div>
-        <h2 id="sheetTitle"></h2>
-        <div class="sheet-status" id="sheetStatus"></div>
-      </div>
-      <button class="icon" id="sheetClose" type="button" aria-label="Закрыть"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+<!-- proof, trace and "how it works": one glass sheet -->
+<div class="sheet-backdrop" id="sheetBackdrop" hidden>
+  <div class="sheet glass" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <header class="sheet__head">
+      <span class="caption" id="sheetKind"></span>
+      <button class="btn btn--glass btn--icon sheet__close" id="sheetClose" type="button" aria-label="Закрыть">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5.5 5.5l9 9M14.5 5.5l-9 9"/></svg>
+      </button>
     </header>
-    <div class="sheet-jumps" id="sheetJumps"></div>
-    <article class="doc" id="docBody"></article>
+    <h2 class="sheet__title" id="sheetTitle"></h2>
+    <div id="sheetBody"></div>
   </div>
+</div>
+
+<!-- full text of a document -->
+<aside class="reader glass" id="reader" aria-label="Документ" hidden>
+  <header class="reader__head">
+    <div>
+      <span class="caption" id="readerKind"></span>
+      <h2 class="reader__title" id="readerTitle"></h2>
+      <p class="reader__status" id="readerStatus"></p>
+    </div>
+    <button class="btn btn--glass btn--icon" id="readerClose" type="button" aria-label="Закрыть">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5.5 5.5l9 9M14.5 5.5l-9 9"/></svg>
+    </button>
+  </header>
+  <div class="reader__jumps" id="readerJumps"></div>
+  <article class="reader__doc" id="readerDoc"></article>
 </aside>
 
-<div class="library" id="library" hidden>
-  <div class="library-inner" role="dialog" aria-label="Документы базы знаний">
-    <header class="library-head">
-      <h2>Документы базы</h2>
-      <button class="icon" id="docsClose" type="button" aria-label="Закрыть"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+<!-- knowledge base -->
+<div class="sheet-backdrop" id="library" hidden>
+  <div class="sheet sheet--wide glass" role="dialog" aria-modal="true" aria-labelledby="libraryTitle">
+    <header class="sheet__head">
+      <span class="caption">База знаний</span>
+      <button class="btn btn--glass btn--icon" id="libraryClose" type="button" aria-label="Закрыть">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5.5 5.5l9 9M14.5 5.5l-9 9"/></svg>
+      </button>
     </header>
-    <input class="search" id="docFilter" type="search" placeholder="Найти документ" autocomplete="off">
-    <div class="library-grid" id="docList"></div>
+    <h2 class="sheet__title" id="libraryTitle">Документы базы</h2>
+    <div class="library__tools">
+      <input class="search" id="docFilter" type="search" placeholder="Найти документ" autocomplete="off" aria-label="Найти документ">
+      <div class="filters" id="filters" role="group" aria-label="Тип документа">
+        <button class="chip on" type="button" data-cat="">Все</button>
+        <button class="chip" type="button" data-cat="company">Компания</button>
+        <button class="chip" type="button" data-cat="law">Законы</button>
+      </div>
+    </div>
+    <div class="rows" id="docList"></div>
   </div>
 </div>
 
 <div class="pop" id="pop" role="tooltip" hidden></div>
-<div class="veil" id="veil" hidden></div>
+<script src="/static/mark.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

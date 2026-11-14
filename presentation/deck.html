@@ -45,21 +45,25 @@
 <body>
 
 <!-- 1 · title -->
-<section class="slide">
+<section class="slide grain">
   <div class="aura"><i class="lilac" style="width:900px;height:900px;left:-260px;top:-360px"></i><i class="peach" style="width:760px;height:760px;right:-200px;top:-260px"></i><i class="mint" style="width:760px;height:760px;left:560px;bottom:-520px"></i><i class="sky" style="width:560px;height:560px;right:60px;bottom:-280px"></i></div>
   <div class="tag iris">Hack&amp;Change 2026 · кейс ПСБ «Юридический ассистент»</div>
   <div class="row grow" style="align-items: center; gap: 80px">
     <div style="flex: 1">
       <h1>Параграф</h1>
-      <p class="lead" style="margin-top: 40px; max-width: 780px">Ответ со ссылкой на пункт —<br>или честное «в базе этого нет».</p>
-      <div class="cmd glass mono" style="margin-top: 60px; display: inline-block">git clone github.com/arniByte/legal_adviser<br>cp .env.example .env <span class="c"># ключ API</span><br>docker compose up --build <span class="c"># → localhost:8000</span></div>
+      <p class="lead" style="margin-top: 34px; max-width: 800px">Юридический ассистент: ответ со ссылкой на пункт — или честное «в базе этого нет».</p>
+      <div class="glass" style="margin-top: 48px; padding: 26px 34px; display: inline-block">
+        <div class="body" style="margin: 0 0 10px; font-size: 22px">Репозиторий с кодом и документацией</div>
+        <div style="font-size: 32px; font-weight: 600; letter-spacing: -.02em">github.com/arniByte/legal_adviser</div>
+        <div class="mono" style="margin-top: 18px; font-size: 21px; line-height: 1.7; color: var(--ink-2)">cp .env.example .env <span style="color: var(--ink-3)"># ключ API</span><br>docker compose up --build <span style="color: var(--ink-3)"># → localhost:8000</span></div>
+      </div>
     </div>
-    <div class="orb glow" style="width: 400px; height: 400px; margin-right: 20px"></div>
+    <div class="mascot" data-size="360" style="margin-right: 60px"></div>
   </div>
 </section>
 
 <!-- 2 · problem -->
-<section class="slide">
+<section class="slide grain">
   <div class="aura"><i class="rose" style="width:700px;height:700px;right:-200px;top:-260px"></i><i class="sky" style="width:700px;height:700px;left:-260px;bottom:-380px"></i></div>
   <div class="tag iris">Проблема</div>
   <h2>Юристу нужна не беседа с моделью,<br><span class="soft">а справка, которую можно проверить.</span></h2>
@@ -72,7 +76,7 @@
 </section>
 
 <!-- 3 · product -->
-<section class="slide" style="padding-bottom: 60px">
+<section class="slide grain" style="padding-bottom: 60px">
   <div class="aura"><i class="lilac" style="width:800px;height:800px;left:-300px;top:-300px"></i><i class="peach" style="width:700px;height:700px;right:-240px;bottom:-320px"></i></div>
   <div class="tag iris">Решение</div>
   <h2>Ответ, источник и проверка — рядом</h2>
@@ -81,7 +85,7 @@
 </section>
 
 <!-- 4 · how it works -->
-<section class="slide">
+<section class="slide grain">
   <div class="aura"><i class="mint" style="width:760px;height:760px;left:420px;bottom:-480px"></i><i class="lilac" style="width:640px;height:640px;left:-240px;top:-240px"></i></div>
   <div class="tag iris">Как это работает</div>
   <h2>Модель пишет ответ.<br><span class="soft">Всё, что можно вычислить, вычисляет код.</span></h2>
@@ -95,7 +99,7 @@
 </section>
 
 <!-- 5 · knowledge base -->
-<section class="slide">
+<section class="slide grain">
   <div class="aura"><i class="sky" style="width:760px;height:760px;right:-200px;top:-200px"></i><i class="rose" style="width:620px;height:620px;right:200px;bottom:-400px"></i></div>
   <div class="tag iris">База знаний</div>
   <h2>Документ — это структура,<br><span class="soft">а не строка из N символов.</span></h2>
@@ -108,7 +112,7 @@
 </section>
 
 <!-- 6 · reliability -->
-<section class="slide">
+<section class="slide grain">
   <div class="aura"><i class="peach" style="width:700px;height:700px;right:-240px;top:-280px"></i><i class="mint" style="width:640px;height:640px;left:-260px;bottom:-360px"></i></div>
   <div class="tag iris">Контроль достоверности</div>
   <h2>На каждую ловушку кейса — свой механизм</h2>
@@ -123,7 +127,7 @@
 </section>
 
 <!-- 7 · verification -->
-<section class="slide">
+<section class="slide grain">
   <div class="aura"><i class="lilac" style="width:760px;height:760px;right:-200px;top:-200px"></i><i class="sky" style="width:600px;height:600px;left:-200px;bottom:-360px"></i></div>
   <div class="row grow" style="gap: 70px">
     <div style="flex: 1">
@@ -141,8 +145,23 @@
   <div class="page">07</div>
 </section>
 
+<!-- 7b · proof -->
+<section class="slide grain" style="padding-bottom: 60px">
+  <div class="aura"><i class="lilac" style="width:800px;height:800px;right:-260px;top:-300px"></i><i class="peach" style="width:640px;height:640px;left:-240px;bottom:-360px"></i></div>
+  <div class="row grow" style="gap: 60px; align-items: center">
+    <div style="flex: 1">
+      <div class="tag iris">Пруф каждого ответа</div>
+      <h2>Цифра в ответе — <span class="soft">сноска на пункт</span></h2>
+      <p class="body" style="margin-top: 28px">Нажал на сноску — открылась цитата положения и проверки, которые выполнил код: положение найдено, редакция действует, числа сверены.</p>
+      <p class="body" style="margin-top: 18px">Документ целиком — в один клик, процитированное подсвечено.</p>
+    </div>
+    <div style="flex: 1; min-width: 0; display: flex; justify-content: center"><img class="shot" src="img/proof.jpg" style="max-height: 700px; max-width: 100%" alt=""></div>
+  </div>
+  <div class="page">08</div>
+</section>
+
 <!-- 8 · scenario -->
-<section class="slide" style="padding-bottom: 60px">
+<section class="slide grain" style="padding-bottom: 60px">
   <div class="aura"><i class="mint" style="width:700px;height:700px;right:-200px;top:-260px"></i><i class="lilac" style="width:700px;height:700px;left:-280px;bottom:-360px"></i></div>
   <div class="tag iris">Сценарий</div>
   <h2>Сделка на 12 млн в августе 2024 года</h2>
@@ -153,11 +172,11 @@
       <div class="card glass" style="padding: 26px 28px"><h3>Модель</h3><p class="body">«Да»: порог тогда — 10 млн. Сейчас 15 млн, но к 2024 году это не применяется.</p></div>
     </div>
   </div>
-  <div class="page">08</div>
+  <div class="page">09</div>
 </section>
 
 <!-- 9 · results -->
-<section class="slide">
+<section class="slide grain">
   <div class="aura"><i class="peach" style="width:760px;height:760px;right:-200px;bottom:-360px"></i><i class="lilac" style="width:700px;height:700px;left:-240px;top:-300px"></i><i class="rose" style="width:520px;height:520px;left:520px;top:-300px"></i></div>
   <div class="tag iris">Результаты</div>
   <h2>Шаг за шагом — выше</h2>
@@ -170,18 +189,18 @@
         <div class="bar"><span>Сабмит 4</span><i style="width: 90%"></i><b>0,449</b></div>
         <div class="bar best"><span>Сабмит 10</span><i style="width: 92%"></i><b>0,458</b></div>
       </div>
-      <p class="body" style="margin-top: 34px">Автопроверка на платформе. 0,5 — уровень базового решения организаторов.</p>
+      <p class="body" style="margin-top: 34px">Автопроверка на платформе, public-часть. 0,5 — уровень базового решения организаторов. Один и тот же код получает балл с разбросом около ±1.</p>
     </div>
     <div style="flex: 1; display: grid; gap: 18px; align-content: start">
       <div class="card glass" style="padding: 24px 30px"><div class="num" style="font-size: 64px">68</div><p class="body">вопросов с эталонами в локальной оценке</p></div>
       <div class="card glass" style="padding: 24px 30px"><div class="num" style="font-size: 64px">0</div><p class="body">ложных срабатываний сверки на эталонах</p></div>
     </div>
   </div>
-  <div class="page">09</div>
+  <div class="page">10</div>
 </section>
 
 <!-- 10 · limits -->
-<section class="slide">
+<section class="slide grain">
   <div class="aura"><i class="sky" style="width:760px;height:760px;left:-240px;top:-300px"></i><i class="mint" style="width:640px;height:640px;right:-200px;bottom:-360px"></i></div>
   <div class="tag iris">Честно о границах</div>
   <h2>Что решение не делает</h2>
@@ -191,11 +210,11 @@
     <div class="card glass" style="padding: 28px 32px"><h3>База в памяти</h3><p class="body">Рассчитано на сотни документов; для большой базы нужен внешний индекс.</p></div>
     <div class="card glass" style="padding: 28px 32px"><h3>Форматы</h3><p class="body">TXT, MD и DOCX. PDF и сканы — следующий шаг.</p></div>
   </div>
-  <div class="page">10</div>
+  <div class="page">11</div>
 </section>
 
 <!-- 11 · roadmap -->
-<section class="slide">
+<section class="slide grain">
   <div class="aura"><i class="lilac" style="width:900px;height:900px;right:-300px;top:-360px"></i><i class="peach" style="width:640px;height:640px;left:-200px;bottom:-400px"></i><i class="mint" style="width:520px;height:520px;right:300px;bottom:-360px"></i></div>
   <div class="tag iris">Дальше</div>
   <h2>От прототипа —<br><span class="soft">к инструменту департамента</span></h2>
@@ -206,10 +225,14 @@
       <div class="card glass" style="padding: 26px 30px"><h3>Контроль</h3><p class="body">Журнал вопросов и проверок, отзывы юристов по ответам.</p></div>
       <div class="card glass" style="padding: 26px 30px"><h3>Контур банка</h3><p class="body">Модель внутри периметра: ядру нужен только совместимый API.</p></div>
     </div>
-    <div class="orb glow" style="width: 300px; height: 300px; margin-bottom: 40px"></div>
+    <div class="mascot" data-size="260" style="margin: 0 50px 70px 0"></div>
   </div>
   <div class="page">github.com/arniByte/legal_adviser</div>
 </section>
 
+<script src="../app/static/mark.js"></script>
+<script>
+  document.querySelectorAll(".mascot").forEach((n, i) => Paragraf.auraMark(n, +n.dataset.size, { palette: "soft", seed: i }));
+</script>
 </body>
 </html>
