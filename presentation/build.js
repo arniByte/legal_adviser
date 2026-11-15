@@ -14,21 +14,46 @@ const ASSETS = path.join(ROOT, 'docs', 'assets');
 const IMG = path.join(DIR, 'img');
 const APP = process.env.APP_URL || 'http://localhost:8000';
 
+/**
+ * The PDF holds each slide as a 2x image with clickable link areas on top. Blur, glass and the dot mascot
+ * then look the same in every viewer: Apple Preview and iOS draw seams and boxes around Chromium's vector effects.
+ */
 async function deck(browser) {
-  const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 900 }, deviceScaleFactor: 2 });
+  const page = await ctx.newPage();
   await page.goto('file://' + path.join(DIR, 'deck.html'));
   await page.evaluate(() => document.fonts.ready);
-  await page.pdf({ path: path.join(DIR, 'paragraf.pdf'), width: '1600px', height: '900px', printBackground: true });
-  const count = await page.locator('.slide').count();
-  if (process.argv.includes('--png')) {
-    const out = path.join(DIR, 'preview');
-    fs.mkdirSync(out, { recursive: true });
-    for (let i = 0; i < count; i++) {
-      await page.locator('.slide').nth(i).screenshot({ path: path.join(out, `${String(i + 1).padStart(2, '0')}.png`) });
-    }
+  await page.waitForTimeout(500);                                        // the mascot canvases draw their first frame
+  const slides = page.locator('.slide');
+  const count = await slides.count();
+  const preview = process.argv.includes('--png') && path.join(DIR, 'preview');
+  if (preview) fs.mkdirSync(preview, { recursive: true });
+  const pages = [];
+  for (let i = 0; i < count; i++) {
+    const slide = slides.nth(i);
+    const jpg = await slide.screenshot({ type: 'jpeg', quality: 90 });
+    if (preview) await slide.screenshot({ path: path.join(preview, `${String(i + 1).padStart(2, '0')}.png`), scale: 'css' });
+    const links = await slide.evaluate((s) => {
+      const box = s.getBoundingClientRect();
+      return [...s.querySelectorAll('a[href]')].map((a) => {
+        const r = a.getBoundingClientRect();
+        return { href: a.href, x: r.left - box.left, y: r.top - box.top, w: r.width, h: r.height };
+      });
+    });
+    pages.push({ img: jpg.toString('base64'), links });
   }
-  await page.close();
-  console.log(`paragraf.pdf: ${count} slides`);
+  const html = `<!doctype html><meta charset="utf-8"><style>
+    @page { size: 1600px 900px; margin: 0; } * { margin: 0; } body { width: 1600px; }
+    section { position: relative; width: 1600px; height: 900px; overflow: hidden; break-after: page; }
+    section img { display: block; width: 1600px; height: 900px; } section a { position: absolute; display: block; }
+  </style>` + pages.map((p) => `<section><img src="data:image/jpeg;base64,${p.img}">` +
+    p.links.map((l) => `<a href="${l.href}" style="left:${l.x}px;top:${l.y}px;width:${l.w}px;height:${l.h}px"></a>`).join('') +
+    '</section>').join('');
+  await page.setContent(html, { waitUntil: 'load' });
+  await page.pdf({ path: path.join(DIR, 'paragraf.pdf'), width: '1600px', height: '900px', printBackground: true });
+  await ctx.close();
+  const linkCount = pages.reduce((n, p) => n + p.links.length, 0);
+  console.log(`paragraf.pdf: ${count} slides, ${linkCount} links`);
 }
 
 async function figures(browser) {
