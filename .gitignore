@@ -11,5 +11,5 @@ __pycache__/
 dist/
 eval/runs/
 node_modules/
-presentation/preview/
+presentation/preview*/
 submission.csv

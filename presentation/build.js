@@ -4,6 +4,7 @@
 //   node presentation/build.js --shots    also screenshots of the running web chat (http://localhost:8000,
 //                                         start it on the mock API, see CONTRIBUTING.md)
 //   node presentation/build.js --video    also a one-minute demo video, docs/media/demo.mp4 (needs ffmpeg)
+//   node presentation/build.js --deck=deck-v2.html   another deck source → presentation/paragraf-v2.pdf
 const path = require('path');
 const fs = require('fs');
 const { chromium } = require('playwright');
@@ -13,6 +14,9 @@ const ROOT = path.join(DIR, '..');
 const ASSETS = path.join(ROOT, 'docs', 'assets');
 const IMG = path.join(DIR, 'img');
 const APP = process.env.APP_URL || 'http://localhost:8000';
+const DECK = (process.argv.find((a) => a.startsWith('--deck=')) || '--deck=deck.html').slice(7);
+const SUFFIX = DECK.replace(/^deck|\.html$/g, '');                  // deck.html → '', deck-v2.html → '-v2'
+const PDF = `paragraf${SUFFIX}.pdf`;
 
 /**
  * The PDF holds each slide as a 2x image with clickable link areas on top. Blur, glass and the dot mascot
@@ -21,12 +25,12 @@ const APP = process.env.APP_URL || 'http://localhost:8000';
 async function deck(browser) {
   const ctx = await browser.newContext({ viewport: { width: 1600, height: 900 }, deviceScaleFactor: 2 });
   const page = await ctx.newPage();
-  await page.goto('file://' + path.join(DIR, 'deck.html'));
+  await page.goto('file://' + path.join(DIR, DECK));
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(500);                                        // the mascot canvases draw their first frame
   const slides = page.locator('.slide');
   const count = await slides.count();
-  const preview = process.argv.includes('--png') && path.join(DIR, 'preview');
+  const preview = process.argv.includes('--png') && path.join(DIR, 'preview' + SUFFIX);
   if (preview) fs.mkdirSync(preview, { recursive: true });
   const pages = [];
   for (let i = 0; i < count; i++) {
@@ -50,10 +54,10 @@ async function deck(browser) {
     p.links.map((l) => `<a href="${l.href}" style="left:${l.x}px;top:${l.y}px;width:${l.w}px;height:${l.h}px"></a>`).join('') +
     '</section>').join('');
   await page.setContent(html, { waitUntil: 'load' });
-  await page.pdf({ path: path.join(DIR, 'paragraf.pdf'), width: '1600px', height: '900px', printBackground: true });
+  await page.pdf({ path: path.join(DIR, PDF), width: '1600px', height: '900px', printBackground: true });
   await ctx.close();
   const linkCount = pages.reduce((n, p) => n + p.links.length, 0);
-  console.log(`paragraf.pdf: ${count} slides, ${linkCount} links`);
+  console.log(`${PDF}: ${count} slides, ${linkCount} links`);
 }
 
 async function figures(browser) {
@@ -162,7 +166,7 @@ async function video(browser) {
   const browser = await chromium.launch();
   if (process.argv.includes('--shots')) await shots(browser);   // first: the deck embeds these screenshots
   if (process.argv.includes('--video')) await video(browser);
-  await figures(browser);
+  if (!SUFFIX) await figures(browser);
   await deck(browser);
   await browser.close();
 })().catch((e) => { console.error(e); process.exit(1); });
