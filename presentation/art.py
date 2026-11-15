@@ -1,12 +1,9 @@
 """Background art for the deck in PSB colours, generated with numpy and Pillow.
 
-    python3 presentation/art.py        # writes presentation/img/bg-*.jpg and art-fluted-dark.jpg
+    python3 presentation/art.py        # writes presentation/img/bg-01.jpg and bg-12.jpg
 
-One dark background per slide, four families in PSB colours:
-rays    — luminous symmetric light rays on deep indigo;
-ribbons — glowing silk ribbons from violet into orange;
-glow    — soft airbrushed light behind frosted glass;
-fluted  — glowing blobs seen through vertical ribbed glass.
+Backgrounds of the title and closing slides: luminous light rays on deep indigo in PSB colours.
+The content slides are plain white. ribbons, glow and fluted are kept as alternative styles.
 Everything is deterministic: the same seed gives the same picture.
 """
 
@@ -121,19 +118,5 @@ def save(img, name, quality=90):
 
 
 if __name__ == "__main__":
-    # one dark background per slide; the bright part keeps to the right or bottom, away from the text
-    W, H = 1600, 900
-    DEEP, VIO, LIL, ORA = (40, 32, 130), (96, 84, 236), (170, 160, 255), (242, 107, 33)
-    save(rays(W, H, centre=0.78), "bg-01.jpg")
-    save(ribbons(W, H, seed=11, centre=0.8, warm=0.6), "bg-02.jpg")
-    save(glow(W, H, [(0.88, 0.2, 0.30, VIO, 0.9), (0.7, 0.95, 0.30, ORA, 0.55), (1.0, 0.75, 0.25, LIL, 0.5)], seed=12), "bg-03.jpg")
-    save(fluted_dark(W, H, [(0.82, 0.25, 0.30, VIO, 0.95), (0.6, 0.95, 0.28, ORA, 0.8), (1.0, 0.7, 0.22, LIL, 0.7)], seed=13), "bg-04.jpg")
-    save(ribbons(W, H, seed=14, centre=0.7, warm=0.2), "bg-05.jpg")
-    save(glow(W, H, [(0.62, 0.5, 0.40, VIO, 0.8), (0.95, 0.15, 0.25, ORA, 0.6), (0.35, 1.0, 0.25, LIL, 0.45)], seed=15), "bg-06.jpg")
-    save(fluted_dark(W, H, [(0.95, 0.15, 0.30, ORA, 0.8), (0.75, 0.8, 0.34, VIO, 0.9), (0.45, 1.05, 0.2, LIL, 0.6)], rib=40, seed=16), "bg-07.jpg")
-    save(glow(W, H, [(0.85, 0.85, 0.35, ORA, 0.65), (0.98, 0.25, 0.30, VIO, 0.85)], seed=17), "bg-08.jpg")
-    save(rays(W, H, seed=18, centre=0.92), "bg-09.jpg")
-    save(ribbons(W, H, seed=19, centre=0.85, warm=0.9), "bg-10.jpg")
-    save(fluted_dark(W, H, [(0.9, 0.4, 0.34, VIO, 0.9), (0.55, 0.0, 0.26, LIL, 0.6), (0.7, 1.0, 0.26, ORA, 0.7)], rib=52, seed=20), "bg-11.jpg")
-    save(rays(W, H, seed=21, centre=0.78), "bg-12.jpg")
-    save(fluted_dark(1200, 800, [(0.25, 0.3, 0.35, VIO, 0.95), (0.8, 0.75, 0.32, ORA, 0.85), (0.9, 0.1, 0.25, LIL, 0.7)], rib=40, seed=22), "art-fluted-dark.jpg")
+    save(rays(1600, 900, centre=0.78), "bg-01.jpg")              # title: light behind the mascot
+    save(rays(1600, 900, seed=21, centre=0.78), "bg-12.jpg")     # closing slide
