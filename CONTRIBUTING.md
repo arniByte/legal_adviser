@@ -31,7 +31,6 @@ Python 3.10+. Docker нужен только для проверки финал�
 .venv/bin/python scripts/build_submission.py --smoke   # собрать dist/submission.zip и прогнать его на заглушке API
 .venv/bin/python eval/run_eval.py --workers 12 --repeats 2 --label v7    # локальная оценка, нужен ключ в окружении
 .venv/bin/python eval/run_eval.py --answers v7 --repeats 3               # ещё раз оценить сохранённые ответы прогона v7
-python3 presentation/art.py                            # фоны титульного и последнего слайдов: световые лучи (numpy, Pillow)
 node presentation/build.js                             # PDF презентации и иллюстрации README (нужен Playwright)
 node presentation/build.js --shots                     # плюс свежие скриншоты интерфейса; веб-прототип должен работать на :8000
 ```
