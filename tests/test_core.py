@@ -79,6 +79,15 @@ def test_law_structure(kb):
     assert koap.unit_by_keys(("прим", "1")).kind == "remark"
 
 
+def test_law_outline_preserves_edition_notes(kb):
+    from la_kb import OUTLINE_MAX_CHARS, law_outline
+    vat = next(d for d in kb.law_docs if d.meta["cite"] == "НК РФ, ст. 164")
+    outline = law_outline(vat, set())
+    assert "Пункт 3 изменен с 1 января 2026" in outline
+    assert "начиная с 1 января 2026" in outline
+    assert len(outline) <= OUTLINE_MAX_CHARS
+
+
 # --------------------------------------------------------------------------- text utilities
 def test_numbers_and_dates():
     from la_text import number_mentions, support_values

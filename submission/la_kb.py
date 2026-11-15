@@ -752,7 +752,24 @@ def law_outline(doc: Doc, shown_units: set) -> str:
             lines.append(f"[{u.locator}] {first}" if u.locator else first)
         text = "\n".join(lines)
         if 0 < len(text) <= OUTLINE_MAX_CHARS:
-            return text
+            # Edition notes are essential when the question concerns an earlier
+            # period. Preserve the outline first, then add only complete notes
+            # that fit; never present a clipped condition as the full rule.
+            extras = []
+            used = len(text)
+            temporal = re.compile(r"изменен|изменён|утратил|вступ|действ|примен", re.I)
+            for u in doc.units:
+                if u.kind not in ("point", "part") or u.idx in shown_units:
+                    continue
+                for note in u.notes:
+                    note = " ".join(note.split())
+                    if not temporal.search(note) or len(note) > 300:
+                        continue
+                    entry = f"[{u.locator}] Примечание редакции: {note}"
+                    if used + len(entry) + 1 <= OUTLINE_MAX_CHARS:
+                        extras.append(entry)
+                        used += len(entry) + 1
+            return text + ("\n" + "\n".join(extras) if extras else "")
     return ""
 
 
