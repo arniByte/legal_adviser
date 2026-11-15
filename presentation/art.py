@@ -1,9 +1,12 @@
 """Background art for the deck in PSB colours, generated with numpy and Pillow.
 
-    python3 presentation/art.py        # writes presentation/img/art-*.jpg
+    python3 presentation/art.py        # writes presentation/img/bg-*.jpg and art-fluted-dark.jpg
 
-fluted — soft airbrushed blobs seen through vertical ribbed glass (light background);
-rays   — luminous symmetric light rays on deep indigo (dark background).
+One dark background per slide, four families in PSB colours:
+rays    — luminous symmetric light rays on deep indigo;
+ribbons — glowing silk ribbons from violet into orange;
+glow    — soft airbrushed light behind frosted glass;
+fluted  — glowing blobs seen through vertical ribbed glass.
 Everything is deterministic: the same seed gives the same picture.
 """
 
@@ -69,6 +72,48 @@ def rays(w, h, seed=2, centre=0.5):
     return grain(np.asarray(pil).astype(np.float32), rng, 6)
 
 
+def ribbons(w, h, seed=5, centre=0.75, warm=0.5):
+    """Luminous silk ribbons on deep indigo: a few sine curves glowing violet into orange."""
+    rng = np.random.default_rng(seed)
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+    u, v = xx / w, yy / h
+    light = np.zeros_like(u)
+    hue = np.zeros_like(u)
+    for k in range(5):
+        amp, freq, phase = 0.10 + 0.05 * rng.random(), 1.2 + rng.random() * 1.4, rng.random() * 6.28
+        base = 0.35 + 0.12 * k + 0.05 * rng.random()
+        curve = base + amp * np.sin(2 * np.pi * (u * freq) + phase) * (0.4 + u)
+        d = np.abs(v - curve)
+        width = 0.010 + 0.025 * u * (0.6 + rng.random())
+        glow = np.exp(-(d / width) ** 2) * 0.9 + np.exp(-(d / (width * 6)) ** 2) * 0.35
+        fade = np.exp(-((u - centre) / 0.45) ** 2)
+        light += glow * fade
+        hue += glow * fade * (k / 4)
+    hue = hue / (light + 1e-4)
+    light = 1 - np.exp(-light * 1.4)
+    cold = np.array([[10, 8, 34], [40, 32, 130], [96, 84, 236], [190, 180, 255], [255, 255, 255]], np.float32)
+    hot = np.array([[10, 8, 34], [70, 26, 70], [242, 107, 33], [255, 190, 140], [255, 250, 240]], np.float32)
+    pos = np.array([0, 0.3, 0.6, 0.85, 1.0], np.float32)
+    mix = np.clip(hue * warm * 1.6, 0, 1)[..., None]
+    c1 = np.stack([np.interp(light, pos, cold[:, c]) for c in range(3)], -1)
+    c2 = np.stack([np.interp(light, pos, hot[:, c]) for c in range(3)], -1)
+    img = c1 * (1 - mix) + c2 * mix
+    pil = Image.fromarray(np.clip(img, 0, 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(2))
+    return grain(np.asarray(pil).astype(np.float32), rng, 6)
+
+
+def fluted_dark(w, h, blobs, rib=46, seed=6):
+    """Ribbed glass in the dark: glowing blobs on near-black seen through the ribs."""
+    return fluted(w, h, blobs, background=(10, 8, 32), rib=rib, seed=seed, blur=40)
+
+
+def glow(w, h, spots, seed=7):
+    """Soft airbrushed glow spots on deep indigo, like light behind frosted glass."""
+    rng = np.random.default_rng(seed)
+    img = soft_blobs(w, h, spots, (11, 9, 36), 60)
+    return grain(img, rng, 6)
+
+
 def save(img, name, quality=90):
     OUT.mkdir(exist_ok=True)
     Image.fromarray(np.clip(img, 0, 255).astype(np.uint8)).save(OUT / name, quality=quality, optimize=True)
@@ -76,8 +121,19 @@ def save(img, name, quality=90):
 
 
 if __name__ == "__main__":
-    save(fluted(900, 1800, [(0.35, 0.22, 0.42, INDIGO, 1), (0.85, 0.55, 0.40, VIOLET, 0.95), (0.25, 0.86, 0.34, ORANGE, 0.9),
-                            (1.0, 0.05, 0.25, LILAC, 0.8)], rib=40, seed=3), "art-fluted-tall.jpg")
-    save(fluted(1600, 900, [(0.18, 0.3, 0.42, VIOLET, 0.9), (0.62, 0.78, 0.38, ORANGE, 0.85), (0.92, 0.2, 0.36, INDIGO, 0.9),
-                            (0.45, 0.1, 0.25, LILAC, 0.7)], rib=44, seed=4), "art-fluted-wide.jpg")
-    save(rays(1600, 900, centre=0.78), "art-rays.jpg")      # light behind the mascot on the last slide
+    # one dark background per slide; the bright part keeps to the right or bottom, away from the text
+    W, H = 1600, 900
+    DEEP, VIO, LIL, ORA = (40, 32, 130), (96, 84, 236), (170, 160, 255), (242, 107, 33)
+    save(rays(W, H, centre=0.78), "bg-01.jpg")
+    save(ribbons(W, H, seed=11, centre=0.8, warm=0.6), "bg-02.jpg")
+    save(glow(W, H, [(0.88, 0.2, 0.30, VIO, 0.9), (0.7, 0.95, 0.30, ORA, 0.55), (1.0, 0.75, 0.25, LIL, 0.5)], seed=12), "bg-03.jpg")
+    save(fluted_dark(W, H, [(0.82, 0.25, 0.30, VIO, 0.95), (0.6, 0.95, 0.28, ORA, 0.8), (1.0, 0.7, 0.22, LIL, 0.7)], seed=13), "bg-04.jpg")
+    save(ribbons(W, H, seed=14, centre=0.7, warm=0.2), "bg-05.jpg")
+    save(glow(W, H, [(0.62, 0.5, 0.40, VIO, 0.8), (0.95, 0.15, 0.25, ORA, 0.6), (0.35, 1.0, 0.25, LIL, 0.45)], seed=15), "bg-06.jpg")
+    save(fluted_dark(W, H, [(0.95, 0.15, 0.30, ORA, 0.8), (0.75, 0.8, 0.34, VIO, 0.9), (0.45, 1.05, 0.2, LIL, 0.6)], rib=40, seed=16), "bg-07.jpg")
+    save(glow(W, H, [(0.85, 0.85, 0.35, ORA, 0.65), (0.98, 0.25, 0.30, VIO, 0.85)], seed=17), "bg-08.jpg")
+    save(rays(W, H, seed=18, centre=0.92), "bg-09.jpg")
+    save(ribbons(W, H, seed=19, centre=0.85, warm=0.9), "bg-10.jpg")
+    save(fluted_dark(W, H, [(0.9, 0.4, 0.34, VIO, 0.9), (0.55, 0.0, 0.26, LIL, 0.6), (0.7, 1.0, 0.26, ORA, 0.7)], rib=52, seed=20), "bg-11.jpg")
+    save(rays(W, H, seed=21, centre=0.78), "bg-12.jpg")
+    save(fluted_dark(1200, 800, [(0.25, 0.3, 0.35, VIO, 0.95), (0.8, 0.75, 0.32, ORA, 0.85), (0.9, 0.1, 0.25, LIL, 0.7)], rib=40, seed=22), "art-fluted-dark.jpg")

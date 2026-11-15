@@ -59,7 +59,7 @@
   .bar i { height: 20px; border-radius: 20px; background: #c6c1ff; }
   .bar b { font-weight: 650; text-align: right; font-variant-numeric: tabular-nums; }
   .bar.best i { background: var(--violet); }
-  .bar.best b { font-family: "Inter", sans-serif; color: var(--ink); }
+  .bar.best b { font-family: "Inter", sans-serif; }
 
   .case { display: grid; grid-template-columns: 300px 1fr; gap: 28px; align-items: baseline; padding: 20px 30px; }
   .case h3 { font-size: 27px; }
@@ -68,13 +68,35 @@
   /* generated art (presentation/art.py): ribbed glass and light rays */
   .art { position: absolute; z-index: 1; border-radius: 40px; background: center / cover no-repeat; box-shadow: 0 40px 90px -40px rgba(23, 22, 58, .55); }
   .art::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .6), inset 0 0 0 1px rgba(255, 255, 255, .35); }
-  .dark { background: #0c0a28 url(img/art-rays.jpg) center / cover no-repeat; color: #fff; }
-  .dark .aura { display: none; }
-  .dark h2 { color: #fff; }
-  .dark h2 .accent { color: #c6c1ff; }
-  .dark .label { color: rgba(255, 255, 255, .7); }
-  .dark .body, .dark .page { color: rgba(255, 255, 255, .8); }
+  /* every slide is dark: a generated background (presentation/art.py) under a shade that keeps text readable */
+  .dark { color: #fff; background: linear-gradient(90deg, rgba(9, 7, 32, .78) 0%, rgba(9, 7, 32, .42) 52%, rgba(9, 7, 32, .06) 100%), var(--bg) center / cover no-repeat, #0b0928; }
+  .dark .aura, .dark .deco { display: none; }
+  .dark .iris { color: #b9b3ff; }
+  .dark h1, .dark h2, .dark h3, .dark .num, .dark .link { color: #fff; }
+  .dark h2 .accent { color: #b9b3ff; }
+  .dark .lead { color: rgba(255, 255, 255, .86); }
+  .dark .body, .dark .case p, .dark .check p.why, .dark .bar span { color: rgba(255, 255, 255, .8); }
+  .dark .label, .dark .page { color: rgba(255, 255, 255, .62); }
+  .dark .who { color: #b9b3ff; }
   .dark .mark { color: #fff; }
+  .dark .mono { color: rgba(255, 255, 255, .85); }
+  .dark .glass, .dark .card.glass, .dark .case.glass, .dark .check.glass {
+    background: rgba(14, 11, 44, .55); border: 1px solid rgba(255, 255, 255, .16); border-radius: 28px;
+    backdrop-filter: blur(22px) saturate(1.4); -webkit-backdrop-filter: blur(22px) saturate(1.4);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12), 0 24px 60px -30px rgba(0, 0, 0, .7); }
+  .dark .check p.q { color: #fff; }
+  .dark .check b.no { color: #ff9a9a; } .dark .check b.ok { color: #7ee6ae; }
+  .dark .bar i { background: rgba(185, 179, 255, .55); }
+  .dark .bar.best i { background: linear-gradient(90deg, #8f84ff, #ff8a3d); }
+  .dark .bar b { color: #fff; }
+  .dark .step-n { background: rgba(255, 255, 255, .14); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .25); }
+  /* screenshots as browser windows */
+  .window { display: flex; flex-direction: column; min-height: 0; border-radius: 20px; overflow: hidden; background: #1b1840;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, .16), 0 40px 90px -30px rgba(0, 0, 0, .8), 0 0 80px -20px rgba(120, 108, 255, .35); }
+  .window__bar { flex: none; display: flex; align-items: center; gap: 9px; height: 42px; padding: 0 18px; background: rgba(255, 255, 255, .08); border-bottom: 1px solid rgba(255, 255, 255, .1); }
+  .window__bar i { width: 12px; height: 12px; border-radius: 50%; background: rgba(255, 255, 255, .28); }
+  .window__bar span { margin: 0 auto; padding: 4px 16px; border-radius: 8px; background: rgba(255, 255, 255, .08); color: rgba(255, 255, 255, .7); font-size: 15px; }
+  .window img { display: block; width: 100%; min-height: 0; flex: 1; object-fit: cover; object-position: top; }
   .qr { width: 180px; height: 180px; padding: 14px; border-radius: 22px; background: #fff; box-shadow: var(--shadow); }
   .qr img { width: 100%; height: 100%; display: block; }
 </style>
@@ -82,9 +104,8 @@
 <body>
 
 <!-- 1 · title: repository first, as the final submission requires -->
-<section class="slide grain">
+<section class="slide grain dark" style="--bg: url(img/bg-01.jpg)">
   <div class="aura"><i class="lilac" style="width:900px;height:900px;left:-280px;top:-380px"></i><i class="peach" style="width:760px;height:760px;right:-220px;top:-260px"></i><i class="mint" style="width:760px;height:760px;left:520px;bottom:-540px"></i></div>
-  <div class="art" style="right: 96px; top: 64px; width: 400px; height: 772px; background-image: url(img/art-fluted-tall.jpg)"></div>
   <div class="tag iris">Hack&amp;Change 2026 · трек ПСБ · команда Geeks &amp; CO.</div>
   <div class="row grow" style="align-items: center; gap: 70px">
     <div style="flex: 1">
@@ -100,12 +121,12 @@
         <div class="qr" style="width: 150px; height: 150px; padding: 10px"><img src="img/qr-repo.svg" alt=""></div>
       </div>
     </div>
-    <div style="width: 430px"></div>
+    <div class="mascot" data-size="280" style="margin-right: 110px"></div>
   </div>
 </section>
 
 <!-- 2 · the problem -->
-<section class="slide grain">
+<section class="slide grain dark" style="--bg: url(img/bg-02.jpg)">
   <div class="aura"><i class="rose" style="width:700px;height:700px;right:-200px;top:-260px"></i><i class="lilac" style="width:700px;height:700px;left:-260px;bottom:-400px"></i></div>
   <div class="deco dots o" style="right: -80px; top: -120px"></div>
   <div class="tag iris">Задача</div>
@@ -119,12 +140,12 @@
 </section>
 
 <!-- 3 · the product -->
-<section class="slide grain" style="padding-bottom: 56px">
+<section class="slide grain dark" style="--bg: url(img/bg-03.jpg); padding-bottom: 56px">
   <div class="aura"><i class="lilac" style="width:800px;height:800px;left:-300px;top:-300px"></i><i class="peach" style="width:700px;height:700px;right:-240px;bottom:-320px"></i></div>
   <div class="tag iris">Решение</div>
   <h2>Вопрос обычным языком — <span class="accent">ответ со ссылкой на пункт</span></h2>
   <div class="row grow" style="margin-top: 34px; gap: 36px; min-height: 0">
-    <div style="flex: 1.75; min-width: 0; display: flex"><img class="shot" src="img/answer.jpg" style="width: 100%; object-fit: cover; object-position: top" alt=""></div>
+    <div style="flex: 1.75; min-width: 0; display: flex"><div class="window" style="width: 100%"><div class="window__bar"><i></i><i></i><i></i><span>paragraf-theta.vercel.app</span></div><img src="img/answer.jpg" alt=""></div></div>
     <div style="flex: 1; display: grid; gap: 16px; align-content: start">
       <div class="card glass" style="padding: 22px 26px"><h3 style="font-size: 25px">Ссылка на каждое положение</h3><p class="body" style="font-size: 21px">Номер сноски ведёт к цитате пункта.</p></div>
       <div class="card glass" style="padding: 22px 26px"><h3 style="font-size: 25px">Документ рядом</h3><p class="body" style="font-size: 21px">Полный текст с подсвеченным положением.</p></div>
@@ -135,7 +156,7 @@
 </section>
 
 <!-- 4 · how it works -->
-<section class="slide grain">
+<section class="slide grain dark" style="--bg: url(img/bg-04.jpg)">
   <div class="aura"><i class="mint" style="width:760px;height:760px;left:420px;bottom:-480px"></i><i class="lilac" style="width:640px;height:640px;left:-240px;top:-240px"></i></div>
   <div class="tag iris">Как это работает</div>
   <h2>Модель формулирует. <span class="accent">Код проверяет.</span></h2>
@@ -149,7 +170,7 @@
 </section>
 
 <!-- 5 · verification -->
-<section class="slide grain">
+<section class="slide grain dark" style="--bg: url(img/bg-05.jpg)">
   <div class="aura"><i class="lilac" style="width:760px;height:760px;right:-200px;top:-200px"></i><i class="peach" style="width:600px;height:600px;left:-200px;bottom:-360px"></i></div>
   <div class="row grow" style="gap: 64px">
     <div style="flex: 1">
@@ -168,7 +189,7 @@
 </section>
 
 <!-- 6 · proof sheet -->
-<section class="slide grain" style="padding-bottom: 56px">
+<section class="slide grain dark" style="--bg: url(img/bg-06.jpg); padding-bottom: 56px">
   <div class="aura"><i class="lilac" style="width:800px;height:800px;right:-260px;top:-300px"></i><i class="peach" style="width:640px;height:640px;left:-240px;bottom:-360px"></i></div>
   <div class="row grow" style="gap: 60px; align-items: center">
     <div style="flex: 1">
@@ -178,7 +199,7 @@
       <p class="body" style="margin-top: 16px; font-size: 25px">Документ целиком открывается рядом с ответом.</p>
     </div>
     <div style="flex: 1; min-width: 0; position: relative; display: flex; justify-content: center; align-items: center; height: 740px">
-      <div class="art" style="inset: 0; background-image: url(img/art-fluted-wide.jpg)"></div>
+      <div class="art" style="inset: 0; background-image: url(img/art-fluted-dark.jpg)"></div>
       <img class="shot" src="img/proof.jpg" style="position: relative; z-index: 2; max-height: 600px; max-width: 86%" alt="">
     </div>
   </div>
@@ -186,7 +207,7 @@
 </section>
 
 <!-- 7 · hard cases -->
-<section class="slide grain">
+<section class="slide grain dark" style="--bg: url(img/bg-07.jpg)">
   <div class="aura"><i class="peach" style="width:700px;height:700px;right:-240px;top:-280px"></i><i class="mint" style="width:640px;height:640px;left:-260px;bottom:-360px"></i></div>
   <div class="tag iris">Сложные случаи</div>
   <h2>Ловушки кейса — <span class="accent">обработаны</span></h2>
@@ -201,22 +222,22 @@
 </section>
 
 <!-- 8 · scenario -->
-<section class="slide grain" style="padding-bottom: 56px">
+<section class="slide grain dark" style="--bg: url(img/bg-08.jpg); padding-bottom: 56px">
   <div class="aura"><i class="mint" style="width:700px;height:700px;right:-200px;top:-260px"></i><i class="lilac" style="width:700px;height:700px;left:-280px;bottom:-360px"></i></div>
   <div class="tag iris">Пример</div>
   <h2>Договор на 12 млн, <span class="accent">август 2024 года</span></h2>
   <div class="row grow" style="margin-top: 34px; gap: 36px; min-height: 0">
-    <div style="flex: 1.75; min-width: 0; display: flex"><img class="shot" src="img/temporal.jpg" style="width: 100%; object-fit: cover; object-position: top" alt=""></div>
+    <div style="flex: 1.75; min-width: 0; display: flex"><div class="window" style="width: 100%"><div class="window__bar"><i></i><i></i><i></i><span>paragraf-theta.vercel.app</span></div><img src="img/temporal.jpg" alt=""></div></div>
     <div style="flex: 1; display: grid; gap: 16px; align-content: start">
-      <div class="card glass" style="padding: 22px 26px"><span class="who">код</span><p class="body" style="font-size: 22px; color: var(--ink)">Определяет редакцию регламента, действовавшую в августе 2024: от 10.01.2023.</p></div>
-      <div class="card glass" style="padding: 22px 26px"><span class="who">ответ</span><p class="body" style="font-size: 22px; color: var(--ink)">«Да»: порог тогда — 10 млн. Сейчас — 15 млн, но к сделке 2024 года он не применяется.</p></div>
+      <div class="card glass" style="padding: 22px 26px"><span class="who">код</span><p class="body" style="font-size: 22px">Определяет редакцию регламента, действовавшую в августе 2024: от 10.01.2023.</p></div>
+      <div class="card glass" style="padding: 22px 26px"><span class="who">ответ</span><p class="body" style="font-size: 22px">«Да»: порог тогда — 10 млн. Сейчас — 15 млн, но к сделке 2024 года он не применяется.</p></div>
     </div>
   </div>
   <div class="page">08</div>
 </section>
 
 <!-- 9 · results -->
-<section class="slide grain">
+<section class="slide grain dark" style="--bg: url(img/bg-09.jpg)">
   <div class="aura"><i class="peach" style="width:760px;height:760px;right:-200px;bottom:-360px"></i><i class="lilac" style="width:700px;height:700px;left:-240px;top:-300px"></i></div>
   <div class="deco dots" style="right: -110px; top: -110px; opacity: .8"></div>
   <div class="tag iris">Результаты</div>
@@ -243,7 +264,7 @@
 </section>
 
 <!-- 10 · technology -->
-<section class="slide grain">
+<section class="slide grain dark" style="--bg: url(img/bg-10.jpg)">
   <div class="aura"><i class="sky" style="width:760px;height:760px;left:-240px;top:-300px"></i><i class="peach" style="width:640px;height:640px;right:-200px;bottom:-360px"></i></div>
   <div class="deco para o" style="right: 60px; top: -130px; opacity: .5"></div>
   <div class="deco para v" style="right: 200px; top: -130px; opacity: .5"></div>
@@ -258,7 +279,7 @@
 </section>
 
 <!-- 11 · limits and next steps -->
-<section class="slide grain">
+<section class="slide grain dark" style="--bg: url(img/bg-11.jpg)">
   <div class="aura"><i class="lilac" style="width:900px;height:900px;right:-300px;top:-360px"></i><i class="mint" style="width:640px;height:640px;left:-200px;bottom:-400px"></i></div>
   <div class="tag iris">Границы и развитие</div>
   <h2>Что дальше</h2>
@@ -280,7 +301,7 @@
 </section>
 
 <!-- 12 · links -->
-<section class="slide grain dark">
+<section class="slide grain dark" style="--bg: url(img/bg-12.jpg)">
   <div class="aura"><i class="lilac" style="width:900px;height:900px;left:-300px;top:-360px"></i><i class="peach" style="width:820px;height:820px;right:-260px;bottom:-380px"></i><i class="mint" style="width:520px;height:520px;left:620px;bottom:-380px"></i></div>
   <div class="row grow" style="align-items: center; gap: 70px">
     <div style="flex: 1">
