@@ -11,35 +11,37 @@
   .slide > *:not(.aura):not(.deco):not(.page) { position: relative; z-index: 2; }
 
   /* type */
-  .display { font-family: "Unbounded", "Onest", sans-serif; }
-  .tag { font-size: 22px; font-weight: 600; letter-spacing: .01em; text-transform: uppercase; }
-  h1 { font-family: "Unbounded", sans-serif; font-size: 156px; font-weight: 700; letter-spacing: -.045em; line-height: .95; }
-  h2 { font-family: "Unbounded", sans-serif; font-size: 54px; font-weight: 600; letter-spacing: -.035em; line-height: 1.1; margin-top: 20px; max-width: 1300px; text-wrap: balance; }
-  h2 .accent { background: var(--iris); -webkit-background-clip: text; background-clip: text; color: transparent; }
-  h3 { font-size: 30px; font-weight: 600; letter-spacing: -.02em; line-height: 1.2; }
-  .lead { font-size: 34px; line-height: 1.35; color: var(--ink-2); letter-spacing: -.012em; }
-  .body { font-size: 23px; line-height: 1.45; color: var(--ink-2); margin-top: 10px; }
+  .display { font-family: "Inter", sans-serif; }
+  .tag { font-size: 22px; font-weight: 650; letter-spacing: .02em; text-transform: uppercase; }
+  h1 { font-family: "Inter", sans-serif; font-size: 168px; font-weight: 750; letter-spacing: -.055em; line-height: .95; }
+  h2 { font-family: "Inter", sans-serif; font-size: 66px; font-weight: 700; letter-spacing: -.04em; line-height: 1.05; margin-top: 18px; max-width: 1340px; text-wrap: balance; }
+  h2 .accent { color: var(--violet); }
+  h3 { font-size: 32px; font-weight: 650; letter-spacing: -.025em; line-height: 1.2; }
+  .lead { font-size: 36px; line-height: 1.32; color: rgba(23, 22, 58, .82); letter-spacing: -.02em; }
+  .body { font-size: 26px; line-height: 1.42; color: rgba(23, 22, 58, .8); margin-top: 12px; letter-spacing: -.01em; }
   .page { position: absolute; right: 104px; bottom: 40px; z-index: 2; font-size: 18px; color: var(--ink-3); }
 
   /* layout */
   .grow { flex: 1; min-height: 0; }
   .row { display: flex; gap: 40px; }
   .grid { display: grid; gap: 22px; }
-  .card { padding: 30px 32px 32px; }
-  .num { font-family: "Unbounded", sans-serif; font-size: 64px; font-weight: 600; letter-spacing: -.04em; line-height: 1; }
+  .card { padding: 34px 34px 36px; }
+  .card.glass, .case.glass, .check.glass { background: #fff; border: 0; border-radius: 28px; backdrop-filter: none; -webkit-backdrop-filter: none;
+    box-shadow: 0 1px 2px rgba(23, 22, 58, .05), 0 20px 44px -26px rgba(23, 22, 58, .32); }
+  .num { font-family: "Inter", sans-serif; font-size: 68px; font-weight: 750; letter-spacing: -.05em; line-height: 1; }
   .shot { display: block; border-radius: 24px; border: 1px solid var(--glass-edge); box-shadow: 0 30px 90px rgba(40, 30, 110, .2); }
-  .step-n { display: grid; place-items: center; width: 56px; height: 56px; border-radius: 50%; color: #fff; font-family: "Unbounded", sans-serif; font-size: 24px; font-weight: 600;
-    background: linear-gradient(135deg, var(--violet), #8b4fcf 55%, var(--orange)); box-shadow: 0 10px 24px -10px rgba(80, 70, 216, .6); }
-  .who { font-size: 18px; font-weight: 600; color: var(--violet); text-transform: uppercase; letter-spacing: .04em; }
-  .link { font-family: "Unbounded", sans-serif; font-size: 30px; font-weight: 600; letter-spacing: -.02em; }
-  .label { font-size: 19px; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: .05em; }
+  .step-n { display: grid; place-items: center; width: 56px; height: 56px; border-radius: 50%; color: #fff; font-family: "Inter", sans-serif; font-size: 24px; font-weight: 600;
+    background: var(--violet); box-shadow: 0 10px 24px -12px rgba(80, 70, 216, .7); }
+  .who { font-size: 19px; font-weight: 650; color: var(--violet); text-transform: uppercase; letter-spacing: .05em; }
+  .link { font-family: "Inter", sans-serif; font-size: 30px; font-weight: 600; letter-spacing: -.02em; }
+  .label { font-size: 19px; font-weight: 650; color: rgba(23, 22, 58, .6); text-transform: uppercase; letter-spacing: .05em; }
 
   /* PSB-style elements: gradient band, leaning parallelograms, halftone dots */
   .deco { position: absolute; z-index: 1; pointer-events: none; }
   .band { height: 8px; border-radius: 8px; background: var(--iris); }
   .para { width: 120px; height: 300px; border-radius: 18px; transform: skewX(-18deg); }
-  .para.v { background: linear-gradient(170deg, #c6c1ff, #5046d8); }
-  .para.o { background: linear-gradient(170deg, #ffd0b0, #f26b21); }
+  .para.v { background: var(--violet); }
+  .para.o { background: var(--orange); }
   .dots { width: 420px; height: 420px; border-radius: 50%;
     background: radial-gradient(circle, rgba(80, 70, 216, .55) 2.4px, transparent 2.8px) 0 0 / 18px 18px;
     -webkit-mask: radial-gradient(circle, transparent 38%, #000 40%, #000 62%, transparent 72%); mask: radial-gradient(circle, transparent 38%, #000 40%, #000 62%, transparent 72%); }
@@ -47,21 +49,21 @@
 
   .check { padding: 24px 28px; }
   .check .pill { font-size: 18px; padding: 6px 14px; box-shadow: none; font-weight: 600; }
-  .check p.q { margin-top: 14px; font-size: 26px; line-height: 1.35; }
-  .check p.why { margin-top: 6px; font-size: 20px; color: var(--ink-2); }
+  .check p.q { margin-top: 14px; font-size: 28px; line-height: 1.3; font-weight: 550; }
+  .check p.why { margin-top: 6px; font-size: 22px; color: rgba(23, 22, 58, .75); }
   .check b.no { color: var(--bad); } .check b.ok { color: var(--ok); }
 
   .bars { display: grid; gap: 16px; }
-  .bar { display: grid; grid-template-columns: 150px 1fr 130px; align-items: center; gap: 22px; font-size: 23px; }
-  .bar span { color: var(--ink-2); }
-  .bar i { height: 20px; border-radius: 20px; background: linear-gradient(90deg, #c6c1ff, var(--violet) 60%, #8b4fcf); }
-  .bar b { font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
-  .bar.best i { background: var(--iris); }
-  .bar.best b { font-family: "Unbounded", sans-serif; color: var(--ink); }
+  .bar { display: grid; grid-template-columns: 160px 1fr 130px; align-items: center; gap: 22px; font-size: 25px; }
+  .bar span { color: rgba(23, 22, 58, .8); }
+  .bar i { height: 20px; border-radius: 20px; background: #c6c1ff; }
+  .bar b { font-weight: 650; text-align: right; font-variant-numeric: tabular-nums; }
+  .bar.best i { background: var(--violet); }
+  .bar.best b { font-family: "Inter", sans-serif; color: var(--ink); }
 
   .case { display: grid; grid-template-columns: 300px 1fr; gap: 28px; align-items: baseline; padding: 20px 30px; }
-  .case h3 { font-size: 25px; }
-  .case p { font-size: 22px; line-height: 1.4; color: var(--ink-2); }
+  .case h3 { font-size: 27px; }
+  .case p { font-size: 24px; line-height: 1.4; color: rgba(23, 22, 58, .8); }
 
   .qr { width: 180px; height: 180px; padding: 14px; border-radius: 22px; background: #fff; box-shadow: var(--shadow); }
   .qr img { width: 100%; height: 100%; display: block; }
@@ -79,7 +81,7 @@
   <div class="row grow" style="align-items: center; gap: 70px">
     <div style="flex: 1">
       <h1>Параграф</h1>
-      <p class="lead" style="margin-top: 30px; max-width: 980px">Ответы по документам компании — со ссылкой на пункт.</p>
+      <p class="lead" style="margin-top: 30px; max-width: 980px">Ответы по документам компании —<br>со ссылкой на пункт.</p>
       <div class="glass" style="margin-top: 44px; padding: 26px 32px; display: flex; gap: 30px; align-items: center; width: fit-content">
         <div>
           <div class="label">Репозиторий: код и документация</div>
@@ -100,7 +102,7 @@
   <div class="deco dots o" style="right: -80px; top: -120px"></div>
   <div class="tag iris">Задача</div>
   <h2>Ответ есть в документах. <span class="accent">Найти его — долго.</span></h2>
-  <div class="grid grow" style="grid-template-columns: repeat(3, 1fr); align-content: end">
+  <div class="grid grow" style="grid-template-columns: repeat(3, 1fr); align-content: center">
     <div class="card glass"><h3>Данные разбросаны</h3><p class="body">Условия лежат в десятках договоров, регламентов и статей законов. Поиск вручную занимает часы.</p></div>
     <div class="card glass"><h3>Ответ зависит от даты</h3><p class="body">У регламента несколько редакций, у договора — допсоглашения. Важно, что действовало в момент события.</p></div>
     <div class="card glass"><h3>Модель отвечает по памяти</h3><p class="body">Нормы в базе новее её знаний: НДС 22 %, МРОТ 27 093 ₽. Ответ без источника нельзя использовать.</p></div>
@@ -127,10 +129,9 @@
 <!-- 4 · how it works -->
 <section class="slide grain">
   <div class="aura"><i class="mint" style="width:760px;height:760px;left:420px;bottom:-480px"></i><i class="lilac" style="width:640px;height:640px;left:-240px;top:-240px"></i></div>
-  <div class="deco band" style="left: 104px; right: 104px; top: 520px; opacity: .35"></div>
   <div class="tag iris">Как это работает</div>
   <h2>Модель формулирует. <span class="accent">Код проверяет.</span></h2>
-  <div class="grid grow" style="grid-template-columns: repeat(4, 1fr); align-content: end">
+  <div class="grid grow" style="grid-template-columns: repeat(4, 1fr); align-content: center">
     <div class="card glass"><div class="row" style="align-items: center; gap: 16px"><div class="step-n">1</div><span class="who">код</span></div><h3 style="margin-top: 22px">Разбор вопроса</h3><p class="body">Контрагент, договор, дата события и действовавшая редакция.</p></div>
     <div class="card glass"><div class="row" style="align-items: center; gap: 16px"><div class="step-n">2</div><span class="who">поиск</span></div><h3 style="margin-top: 22px">Поиск</h3><p class="body">По словам и по смыслу, с перепроверкой порядка.</p></div>
     <div class="card glass"><div class="row" style="align-items: center; gap: 16px"><div class="step-n">3</div><span class="who">модель</span></div><h3 style="margin-top: 22px">Ответ</h3><p class="body">Только по найденному тексту, с номером пункта.</p></div>
@@ -238,7 +239,7 @@
   <div class="deco para v" style="right: 200px; top: -130px; opacity: .5"></div>
   <div class="tag iris">Технологии</div>
   <h2>Запуск <span class="accent">одной командой</span></h2>
-  <div class="grid grow" style="grid-template-columns: repeat(3, 1fr); align-content: end">
+  <div class="grid grow" style="grid-template-columns: repeat(3, 1fr); align-content: center">
     <div class="card glass"><h3>Модели</h3><p class="body">DeepSeek V4.1 Flash — ответ. BAAI bge-m3 — поиск по смыслу. Qwen3 Reranker 8B — порядок. Любой OpenAI-совместимый API.</p></div>
     <div class="card glass"><h3>Ядро</h3><p class="body">Python: разбор документов на пункты, гибридный поиск, проверка ответа. Зависимости — httpx и numpy. 40 автотестов без сети.</p></div>
     <div class="card glass"><h3>Развёртывание</h3><p class="body"><span class="mono" style="font-size: 20px">docker compose up</span> — интерфейс на порту 8000. Онлайн-версия — на Vercel.</p></div>
