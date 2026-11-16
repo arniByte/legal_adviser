@@ -31,6 +31,8 @@ from la_text import squash  # noqa: E402
 
 OUTPUT = Path("submission.csv")
 MAX_ANSWER_CHARS = 9500
+MAX_RETRY_PASSES = 8          # extra passes over questions the model did not answer
+RETRY_PAUSE = 15.0            # seconds to wait after a pass that recovered nothing
 T_START = time.monotonic()
 
 
@@ -216,6 +218,13 @@ def main() -> int:
             log(f"question #{position + 1}: {type(exc).__name__}: {str(exc)[:120]}")
             return position, None, "error"
 
+    failed: set = set()                     # questions left without a model answer (API failure, skipped)
+
+    def needs_retry(result) -> bool:
+        if result is None:
+            return True
+        return result.status == "ERROR" and bool(result.error) and not result.grounded_fallback
+
     last_flush = time.monotonic()
     with ThreadPoolExecutor(max_workers=s.max_workers) as pool:
         futures = [pool.submit(work, i) for i in range(total)]
@@ -225,6 +234,8 @@ def main() -> int:
             with lock:
                 state["done"] += 1
                 state["modes"][mode] = state["modes"].get(mode, 0) + 1
+                if needs_retry(result):
+                    failed.add(position)
                 if result is not None:
                     answers[qid] = result.answer
                     state["status"][result.status] = state["status"].get(result.status, 0) + 1
@@ -247,6 +258,47 @@ def main() -> int:
                     last_flush = time.monotonic()
             if done % 10 == 0 or done == total:
                 log(f"answered {done}/{total}")
+
+    # ---- retry passes: a question the model never answered is asked again while there is time left.
+    # With a healthy API this block does nothing; after proxy failures it replaces placeholder answers.
+    retry_stats = {"passes": 0, "recovered": 0, "first": len(failed)}
+
+    def retry_work(position: int, left: int):
+        mode, per_question = pacer.choose(left)
+        if mode == "skip":
+            return position, None
+        q_deadline = min(deadline, time.monotonic() + max(25.0, min(150.0, per_question * 2.5)))
+        try:
+            return position, assistant.answer(questions[position][1], qvec=qvecs[position],
+                                              deadline=q_deadline, mode=mode)
+        except Exception as exc:
+            log(f"retry of question #{position + 1}: {type(exc).__name__}: {str(exc)[:120]}")
+            return position, None
+
+    while failed and s.has_api and retry_stats["passes"] < MAX_RETRY_PASSES and deadline - time.monotonic() > 45:
+        retry_stats["passes"] += 1
+        batch = sorted(failed)
+        recovered = 0
+        with ThreadPoolExecutor(max_workers=s.max_workers) as pool:
+            futures = [pool.submit(retry_work, i, len(batch)) for i in batch]
+            for future in as_completed(futures):
+                position, result = future.result()
+                if needs_retry(result):
+                    continue
+                with lock:
+                    answers[questions[position][0]] = result.answer
+                    failed.discard(position)
+                    state["status"][result.status] = state["status"].get(result.status, 0) + 1
+                    state["status"]["ERROR"] = max(0, state["status"].get("ERROR", 0) - 1)
+                    recovered += 1
+        retry_stats["recovered"] += recovered
+        with lock:
+            write_submission(questions, answers)
+        log(f"retry pass {retry_stats['passes']}: recovered {recovered} of {len(batch)}")
+        if not recovered and failed:            # the API is still down: wait a little before the next pass
+            time.sleep(max(0.0, min(RETRY_PAUSE, deadline - time.monotonic() - 45)))
+    log(f"retries: questions without a model answer after the main pass {retry_stats['first']}; "
+        f"passes {retry_stats['passes']}; recovered {retry_stats['recovered']}; still failed {len(failed)}")
 
     with lock:
         write_submission(questions, answers)

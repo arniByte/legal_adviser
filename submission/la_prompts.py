@@ -222,7 +222,48 @@ def render_examples(kb) -> str:
             "запроса)\n\n" + "\n\n".join(blocks))
 
 
+# Samples of real documents inside the style rules; with invented examples they are replaced as well.
+_FICTIONAL_SAMPLES = (
+    ("«договор поставки № П-17/2024 с ООО «Альфа-Трейд»», «Регламент согласования договоров в редакции от 01.03.2025», "
+     "«ТК РФ, ст. 70»",
+     "«договор подряда № ПД-09/2021 с ООО «Гранит-Строй»», «Положение о закупках в редакции от 01.09.2023», "
+     "«Закон № 77-З, ст. 8»"),
+    ("спросили о сроке проверки качества — назови и срок приёмки по количеству из того же пункта",
+     "спросили о сроке приёмки работ — назови и срок приёмки скрытых работ из того же пункта"),
+    ("«датой поставки считается дата подписания УПД (п. 3.3)»",
+     "«датой уведомления считается дата его получения заказчиком (п. 5.4)»"),
+)
+
+
+def fewshot_mode() -> str:
+    import os
+    return "demo" if os.getenv("LA_FEWSHOT", "").strip().lower() == "demo" else "fictional"
+
+
+def render_fictional_examples(kb) -> str:
+    from la_examples import FICTIONAL_EXAMPLES, FICTIONAL_NOTE
+    used = {label for ex in FICTIONAL_EXAMPLES for label, _, _ in ex["sources"]}
+    if used & set(kb.by_id):                  # the invented labels must not point at real documents
+        return ""
+    blocks = []
+    for ex in FICTIONAL_EXAMPLES:
+        src_lines = [f"{label} | {loc} | {quote}" for label, loc, quote in ex["sources"]]
+        blocks.append(
+            f"Запрос:\n{ex['q']}\nВывод:\n<analysis>{ex['analysis']}</analysis>\n<status>{ex['status']}</status>\n"
+            f"<answer>{ex['answer']}</answer>\n<extra>{ex.get('extra', '')}</extra>\n<sources>\n"
+            + "\n".join(src_lines) + "\n</sources>")
+    return FICTIONAL_NOTE + "\n\n" + "\n\n".join(blocks)
+
+
 def build_system(kb) -> str:
+    if fewshot_mode() == "fictional":
+        examples = render_fictional_examples(kb)
+        if examples:
+            prompt = SYSTEM_PROMPT
+            for real, invented in _FICTIONAL_SAMPLES:
+                assert real in prompt
+                prompt = prompt.replace(real, invented)
+            return prompt + "\n\n" + examples
     examples = render_examples(kb)
     return SYSTEM_PROMPT + ("\n\n" + examples if examples else "")
 
